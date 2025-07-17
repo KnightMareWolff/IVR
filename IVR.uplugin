@@ -1,0 +1,24 @@
+﻿{
+  "Version": 5,
+  "Modules": [
+    {
+      "Name": "IVR",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "FileVersion": 3,
+  "MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/099c0fd27b6e434db3adfaec71a2b82c",
+  "Installed": false,
+  "CreatedByURL": "http://insaneframework.com",
+  "Category": "Media",
+  "CreatedBy": "Williäm Wolff",
+  "IsExperimentalVersion": false,
+  "Description": "Advanced video recording system for Unreal Engine",
+  "IsBetaVersion": false,
+  "SupportURL": "http://insaneframework.com/ivr-camera-man/",
+  "DocsURL": "",
+  "VersionName": "5.0",
+  "FriendlyName": "IVR - Insane Video Recorder",
+  "CanContainContent": true
+}
