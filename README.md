@@ -40,3 +40,7 @@ With JustRT, your video frames are delivered to you the moment they are captured
 *   **Feed Machine Learning Algorithms:** Integrate the video stream for AI systems, such as Unreal's new Learning Agents, allowing your algorithms to "see" and learn in real-time.
 
 JustRT transforms video from a recorded final product into an active, evolving component, opening doors to a new generation of interactive experiences and truly dynamic virtual productions.
+
+## More Info at:
+https://www.insaneframework.com/docs
+
