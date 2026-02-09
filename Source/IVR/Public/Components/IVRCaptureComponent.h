@@ -1,6 +1,6 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copywright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #pragma once
@@ -19,6 +19,7 @@
 
 #include "Engine/Texture2D.h" 
 #include "Engine/TextureRenderTarget2D.h" 
+#include "CineCameraComponent.h" // Se ainda estiver usando
 
 #include "IVRCaptureComponent.generated.h"
 
@@ -29,7 +30,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingPaused);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingResumed);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingStopped);
 
-// Delegate para notificar que um frame em tempo real (agora com features) est pronto para coleta
+// Delegate para notificar que um frame em tempo real (agora com features) está pronto para coleta
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRealTimeFrameReady, const FIVR_JustRTFrame&, FrameOutput);
 
 
@@ -69,13 +70,13 @@ public:
     bool bAutoStartNewTake = true;
 
     /**
-     * @brief Prepara um arquivo de vdeo para gravao, transcodificando-o para um formato compatvel
-     *        com o OpenCV, se necessrio. O processo pode levar tempo e bloquear a thread.
-     * @param InSourceVideoPath O caminho completo para o vdeo original.
-     * @param OutPreparedVideoPath O caminho completo onde o vdeo preparado ser salvo.
-     * @param bOverwrite Se true, sobrescreve o arquivo de sada se ele j existir.
-     * @return O caminho completo do vdeo preparado se a transcodificao for bem-sucedida,
-     *         uma string vazia caso contrrio.
+     * @brief Prepara um arquivo de vídeo para gravação, transcodificando-o para um formato compatível
+     *        com o OpenCV, se necessário. O processo pode levar tempo e bloquear a thread.
+     * @param InSourceVideoPath O caminho completo para o vídeo original.
+     * @param OutPreparedVideoPath O caminho completo onde o vídeo preparado será salvo.
+     * @param bOverwrite Se true, sobrescreve o arquivo de saída se ele já existir.
+     * @return O caminho completo do vídeo preparado se a transcodificação for bem-sucedida,
+     *         uma string vazia caso contrário.
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Video Preparation",
               meta = (DisplayName = "Prepare Video for Recording",
@@ -85,15 +86,15 @@ public:
 
 
     /**
-     * @brief Transcodifica um vdeo existente para um formato mais amplamente compatvel.
-     *        til para gerar uma verso para distribuio ao usurio final a partir de um master otimizado.
+     * @brief Transcodifica um vídeo existente para um formato mais amplamente compatível.
+     *        Útil para gerar uma versão para distribuição ao usuário final a partir de um master otimizado.
      *        Pode levar tempo e bloquear a thread.
-     * @param InSourceVideoPath O caminho completo para o vdeo de entrada (ex: o Master gerado).
-     * @param OutCompatibleVideoPath O caminho completo onde o vdeo compatvel ser salvo.
-     * @param bOverwrite Se true, sobrescreve o arquivo de sada se ele j existir.
-     * @param EncodingSettings As configuraes de vdeo para a transcodificao (codec, bitrate, etc.).
-     * @return O caminho completo do vdeo compatvel se a transcodificao for bem-sucedida,
-     *         uma string vazia caso contrrio.
+     * @param InSourceVideoPath O caminho completo para o vídeo de entrada (ex: o Master gerado).
+     * @param OutCompatibleVideoPath O caminho completo onde o vídeo compatível será salvo.
+     * @param bOverwrite Se true, sobrescreve o arquivo de saída se ele já existir.
+     * @param EncodingSettings As configurações de vídeo para a transcodificação (codec, bitrate, etc.).
+     * @return O caminho completo do vídeo compatível se a transcodificação for bem-sucedida,
+     *         uma string vazia caso contrário.
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Video Export",
               meta = (DisplayName = "Export Video to Compatible Format",
@@ -101,7 +102,7 @@ public:
                       DeterminesOutputType = "OutCompatibleVideoPath"))
     FString ExportVideoToCompatibleFormat(const FString& InSourceVideoPath, const FString& OutCompatibleVideoPath, bool bOverwrite, const FIVR_VideoSettings& EncodingSettings);
 
-    // Delegates para notificao de estados da gravao (Proposta 02)
+    // Delegates para notificação de estados da gravação (Proposta 02)
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStarted OnRecordingStarted;
 
@@ -114,7 +115,7 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStopped OnRecordingStopped;
 
-    // Delegate para notificar que um frame em tempo real est pronto para coleta
+    // Delegate para notificar que um frame em tempo real está pronto para coleta
     UPROPERTY(BlueprintAssignable, Category = "IVR|JustRTCapture Events")
     FOnRealTimeFrameReady OnRealTimeFrameReady;
 
@@ -167,29 +168,29 @@ private:
     void UpdateTextureFromRawData(UTexture2D* Texture, const TArray<uint8>& RawData, int32 InWidth, int32 InHeight);
 
     /**
-     * @brief Processa a FIVR_JustRTFrame em uma thread de segundo plano para extrair features e deprojet�-las para 3D.
-     * O resultado � adicionado de volta � FIVR_JustRTFrame antes de ser transmitido via delegate.
-     * @param InOutFrame A estrutura FIVR_JustRTFrame a ser preenchida com as features. Passada por valor (c�pia).
-     * @param CameraTransform A transforma��o da c�mera de captura usada para a deproje��o 3D.
-     * @param CameraFOV O Campo de Vis�o da c�mera de captura.
-     * @param FramePoolInstance O pool de frames para libera��o de buffers se necess�rio.
-     * @param MaxCorners O n�mero m�ximo de cantos para a goodFeaturesToTrack.
-     * @param QualityLevel O n�vel de qualidade para a goodFeaturesToTrack.
-     * @param MinDistance A dist�ncia m�nima entre cantos para a goodFeaturesToTrack.
-     * @param bDebugDrawFeatures Se verdadeiro, desenha as detec��es na imagem.
+     * @brief Processa a FIVR_JustRTFrame em uma thread de segundo plano para extrair features e deprojetá-las para 3D.
+     * O resultado é adicionado de volta à FIVR_JustRTFrame antes de ser transmitido via delegate.
+     * @param InOutFrame A estrutura FIVR_JustRTFrame a ser preenchida com as features. Passada por valor (cópia).
+     * @param CameraTransform A transformação da câmera de captura usada para a deprojeção 3D.
+     * @param CameraFOV O Campo de Visão da câmera de captura.
+     * @param FramePoolInstance O pool de frames para liberação de buffers se necessário.
+     * @param MaxCorners O número máximo de cantos para a goodFeaturesToTrack.
+     * @param QualityLevel O nível de qualidade para a goodFeaturesToTrack.
+     * @param MinDistance A distância mínima entre cantos para a goodFeaturesToTrack.
+     * @param bDebugDrawFeatures Se verdadeiro, desenha as detecções na imagem.
      */
     void ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFrame, FTransform CameraTransform, float CameraFOV, UIVRFramePool* FramePoolInstance, int32 MaxCorners, float QualityLevel, float MinDistance, bool bDebugDrawFeatures);
     
     /**
-     * @brief Fun��o auxiliar para realizar a deproje��o de um ponto 2D do frame para o mundo 3D.
-     *        Esta � uma implementa��o manual para uso em threads de segundo plano, sem acesso direto
+     * @brief Função auxiliar para realizar a deprojeção de um ponto 2D do frame para o mundo 3D.
+     *        Esta é uma implementação manual para uso em threads de segundo plano, sem acesso direto
      *        a UGameplayStatics ou objetos da Render Thread.
-     * @param PixelPos O ponto 2D na coordenada da imagem (relativa � ImageResolution).
-     * @param CameraTransform A transforma��o (posi��o e rota��o) da c�mera de captura.
-     * @param FOVDegrees O Campo de Vis�o da c�mera em graus.
-     * @param ImageResolution As dimens�es da imagem de origem dos pixels (largura e altura da grava��o).
-     * @param OutWorldLocation A localiza��o 3D no mundo onde o ponto 2D se projeta.
-     * @param OutWorldDirection A dire��o 3D do raio de proje��o a partir da c�mera.
+     * @param PixelPos O ponto 2D na coordenada da imagem (relativa à ImageResolution).
+     * @param CameraTransform A transformação (posição e rotação) da câmera de captura.
+     * @param FOVDegrees O Campo de Visão da câmera em graus.
+     * @param ImageResolution As dimensões da imagem de origem dos pixels (largura e altura da gravação).
+     * @param OutWorldLocation A localização 3D no mundo onde o ponto 2D se projeta.
+     * @param OutWorldDirection A direção 3D do raio de projeção a partir da câmera.
      */
     static void DeprojectPixelToWorld(
         const FVector2D& PixelPos,
@@ -199,5 +200,3 @@ private:
         FVector& OutWorldLocation,
         FVector& OutWorldDirection);
 };
-
-

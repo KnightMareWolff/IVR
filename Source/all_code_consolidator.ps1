@@ -2,7 +2,7 @@
 $outputFile = "all_code.txt"
 
 # Extensões dos arquivos de código a serem incluídos.
-$extensions = @(".h", ".cpp")
+$extensions = @(".h", ".cpp" , ".cs")
 
 Write-Host "✅ Iniciando a consolidação de arquivos .h e .cpp para Williäm Wolff..." -ForegroundColor Green
 Write-Host "O arquivo de saída será: '$outputFile'." -ForegroundColor DarkYellow

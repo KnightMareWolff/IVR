@@ -1,40 +1,48 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
-// Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
+﻿// IVR/Source/IVR/Public/UI/IVRDisplayWidget.h
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/Image.h" // Necess�rio para UImage
-#include "Engine/Texture2D.h" // Necess�rio para UTexture2D
+#include "Components/Image.h"       // Necessário para UImage* (se usar Binding por C++)
+#include "Engine/Texture2D.h"       // Necessário para UTexture2D*
+#include "Components/IVRCaptureComponent.h" // Inclua o cabeçalho do seu componente de captura
+#include "Core/IVRTypes.h"          // Necessário para FIVR_JustRTFrame
+
 #include "IVRDisplayWidget.generated.h"
 
 /**
- * Widget de exemplo para exibir uma textura 2D.
- * Pode ser herdado em Blueprint para construir a interface visual.
+ * @brief Widget UMG customizado para exibir a textura em tempo real do IVRCaptureComponent.
  */
 UCLASS()
 class IVR_API UIVRDisplayWidget : public UUserWidget
 {
     GENERATED_BODY()
-    
-public:
-    // O widget de imagem que ir� exibir a textura.
-    // Marque com BindWidget para que o framework UMG o injete automaticamente
-    // se houver um UImage com o mesmo nome (DisplayImage) no seu Blueprint Widget.
-    UPROPERTY(meta = (BindWidget))
-    UImage* DisplayImage;
 
-    /**
-     * Define a textura a ser exibida no widget de imagem.
-     * @param NewTexture A nova textura a ser usada.
-     */
+public:
+    // Esta propriedade UTexture2D* será a ponte para a textura exibida no UMG.
+    // Ela será atualizada a cada novo frame recebido do IVRCaptureComponent.
+    UPROPERTY(BlueprintReadOnly, Category = "IVR|Display")
+    UTexture2D* CurrentLiveTexture;
+
+    // Função para definir o componente de captura ao qual este widget está vinculado.
+    // Chamável a partir de Blueprints.
     UFUNCTION(BlueprintCallable, Category = "IVR|Display")
-    void SetDisplayTexture(UTexture2D* NewTexture);
+    void SetCaptureComponent(UIVRCaptureComponent* InCaptureComponent);
 
 protected:
+    // Chamado quando o widget é construído (equivalente ao BeginPlay para Widgets).
     virtual void NativeConstruct() override;
-};
+    // Chamado quando o widget é destruído (equivalente ao EndPlay para Widgets).
+    virtual void NativeDestruct() override;
 
+private:
+    // Referência privada para o componente de captura, para gerenciar a inscrição/desinscrição.
+    UPROPERTY()
+    UIVRCaptureComponent* LinkedCaptureComponent;
+
+    // Manipulador para o delegate OnRealTimeFrameReady do IVRCaptureComponent.
+    // Este método receberá a estrutura FIVR_JustRTFrame que contém a LiveTexture.
+    UFUNCTION()
+    void OnRealTimeFrameReadyHandler(const FIVR_JustRTFrame& FrameData);
+};

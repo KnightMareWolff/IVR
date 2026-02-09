@@ -1,6 +1,6 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copywright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #pragma once
@@ -12,31 +12,34 @@
 #include "HAL/Runnable.h"       // Para FRunnable
 #include "HAL/RunnableThread.h" // Para FRunnableThread
 #include "HAL/ThreadSafeBool.h" // Para FThreadSafeBool
-#include "HAL/ThreadSafeCounter.h" // Para FThreadSafeCounter (resolu��o) e FThreadSafeFloat (FPS)
+#include "HAL/ThreadSafeCounter.h" // Para FThreadSafeCounter (resolução)
 #include "Containers/Queue.h"   // Para TQueue
 #include "TimerManager.h" // For FTimerHandle and FTimerManager
-
-#include "IVRVideoFrameSource.generated.h"
+#include <atomic> // Necessário para std::atomic (mesmo sem cv::)
 
 // Forward declare do worker thread
 class FVideoFileCaptureWorker;
 
+// **CORREÇÃO CRÍTICA**: O include do arquivo .generated.h DEVE SER O ÚLTIMO include
+// em qualquer arquivo de cabeçalho UObject.
+#include "IVRVideoFrameSource.generated.h"
+
 /**
- * @brief Fonte de frames que l de um arquivo de vdeo usando OpenCV em um thread separado.
+ * @brief Fonte de frames que lê de um arquivo de vídeo usando OpenCV em um thread separado.
  */
 UCLASS(Blueprintable, BlueprintType, meta=(DisplayName="IVR Video File Frame Source"))
 class IVR_API UIVRVideoFrameSource : public UIVRFrameSource
 {
-    GENERATED_BODY()
+    GENERATED_BODY() // <-- ESTA MACRO REQUER O .generated.h ACIMA
 
 public:
     UIVRVideoFrameSource();
     virtual void BeginDestroy() override;
 
     /**
-     * @brief Inicializa a fonte de frames de arquivo de vdeo.
+     * @brief Inicializa a fonte de frames de arquivo de vídeo.
      * @param World O UWorld atual.
-     * @param Settings As configuraes de vdeo, incluindo o caminho do arquivo e opes de reproduo.
+     * @param Settings As configurações de vídeo, incluindo o caminho do arquivo e opções de reprodução.
      * @param InFramePool O pool de frames para adquirir e liberar buffers.
      */
     virtual void Initialize(UWorld* World, const FIVR_VideoSettings& Settings, UIVRFramePool* InFramePool) override;
@@ -47,39 +50,39 @@ public:
     virtual void Shutdown() override;
 
     /**
-     * @brief Inicia a captura de frames do arquivo de vdeo.
+     * @brief Inicia a captura de frames do arquivo de vídeo.
      */
     virtual void StartCapture() override;
 
     /**
-     * @brief Para a captura de frames do arquivo de vdeo.
+     * @brief Para a captura de frames do arquivo de vídeo.
      */
     virtual void StopCapture() override;
 
     /**
-     * @brief Retorna a largura real do frame lido do arquivo de vdeo.
-     * Vlido aps Initialize.
+     * @brief Retorna a largura real do frame lido do arquivo de vídeo.
+     * Válido após Initialize.
      */
     UFUNCTION(BlueprintPure, Category = "IVR|VideoFile")
     int32 GetActualFrameWidth() const;
 
     /**
-     * @brief Retorna a altura real do frame lido do arquivo de vdeo.
-     * Vlido aps Initialize.
+     * @brief Retorna a altura real do frame lido do arquivo de vídeo.
+     * Válido após Initialize.
      */
     UFUNCTION(BlueprintPure, Category = "IVR|VideoFile")
     int32 GetActualFrameHeight() const;
 
     /**
-     * @brief Retorna o FPS nativo do arquivo de v�deo.
-     * V�lido ap�s Initialize.
+     * @brief Retorna o FPS nativo do arquivo de vídeo.
+     * Válido após Initialize.
      */
     UFUNCTION(BlueprintPure, Category = "IVR|VideoFile")
     float GetActualVideoFileFPS() const;
     
     /**
-     * @brief Retorna o FPS efetivo de reprodu��o do arquivo de v�deo (FPS nativo * Playback Speed).
-     * V�lido ap�s Initialize.
+     * @brief Retorna o FPS efetivo de reprodução do arquivo de vídeo (FPS nativo * Playback Speed).
+     * Válido após Initialize.
      */
     UFUNCTION(BlueprintPure, Category = "IVR|VideoFile")
     float GetEffectivePlaybackFPS() const;
@@ -88,26 +91,24 @@ protected:
     /** Timer handle para polling de frames do worker thread no Game Thread. */
     FTimerHandle FramePollTimerHandle;
 
-    /** Instncia do worker runnable que lida com a leitura do arquivo de vdeo no thread. */
+    /** Instância do worker runnable que lida com a leitura do arquivo de vídeo no thread. */
     FVideoFileCaptureWorker* WorkerRunnable;
 
-    /** Thread em que o WorkerRunnable ser executado. */
+    /** Thread em que o WorkerRunnable será executado. */
     FRunnableThread* WorkerThread;
 
     /** Fila thread-safe para passar frames do worker thread (produtor) para o Game Thread (consumidor). */
     TQueue<FIVR_VideoFrame, EQueueMode::Mpsc> CapturedFrameQueue;
 
-    /** Flag atmica para sinalizar  thread worker para parar. */
+    /** Flag atômica para sinalizar à thread worker para parar. */
     FThreadSafeBool bShouldStopWorker;
 
-    /** Evento para sinalizar novos frames disponveis do worker thread para o Game Thread. */
+    /** Evento para sinalizar novos frames disponíveis do worker thread para o Game Thread. */
     FEvent* NewFrameEvent;
 
     /**
-     * @brief Funo de callback do timer para pegar frames da fila e broadcast-los.
+     * @brief Função de callback do timer para pegar frames da fila e broadcastá-los.
      * Executada no Game Thread.
      */
     void PollForNewFrames();
 };
-
-

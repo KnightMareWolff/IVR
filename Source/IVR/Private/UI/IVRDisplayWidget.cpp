@@ -1,34 +1,74 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
-// Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
+﻿// IVR/Source/IVR/Private/UI/IVRDisplayWidget.cpp
+
 #include "UI/IVRDisplayWidget.h"
+// Não precisamos incluir IVRGlobalStatics ou outros que não são diretamente usados aqui.
 
 void UIVRDisplayWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    // Verifica se o DisplayImage foi vinculado corretamente pelo meta = (BindWidget)
-    if (!DisplayImage)
+    // Se o componente de captura já foi definido (via Blueprint ou em outra parte do C++),
+    // inscreva-se no delegate. O SetCaptureComponent já lida com isso, mas é bom ter uma
+    // verificação aqui para garantir caso o componente seja setado antes do NativeConstruct.
+    if (LinkedCaptureComponent && !LinkedCaptureComponent->OnRealTimeFrameReady.IsBound())
     {
-        UE_LOG(LogTemp, Warning, TEXT("UIVRDisplayWidget: DisplayImage UImage component is null. "
-                                      "Ensure a UImage widget named 'DisplayImage' exists in your UMG Blueprint "
-                                      "that inherits from this C++ class, and that 'Is Variable' is checked."));
+        LinkedCaptureComponent->OnRealTimeFrameReady.AddDynamic(this, &UIVRDisplayWidget::OnRealTimeFrameReadyHandler);
     }
 }
 
-void UIVRDisplayWidget::SetDisplayTexture(UTexture2D* NewTexture)
+void UIVRDisplayWidget::NativeDestruct()
 {
-    if (DisplayImage)
+    // É CRUCIAL desinscrever-se do delegate para evitar vazamentos de memória e crashes
+    // quando o widget é destruído, mas o componente de captura ainda está ativo.
+    if (LinkedCaptureComponent)
     {
-        // Define a textura usando um Brush.
-        // O UMG gerenciar� o redimensionamento do Image para o tamanho da textura.
-        DisplayImage->SetBrushFromTexture(NewTexture);
+        LinkedCaptureComponent->OnRealTimeFrameReady.RemoveDynamic(this, &UIVRDisplayWidget::OnRealTimeFrameReadyHandler);
     }
-    else
+    CurrentLiveTexture = nullptr; // Limpe a referência da textura ao destruir
+    Super::NativeDestruct();
+}
+
+void UIVRDisplayWidget::SetCaptureComponent(UIVRCaptureComponent* InCaptureComponent)
+{
+    // Verifica se o componente de captura está mudando.
+    if (LinkedCaptureComponent != InCaptureComponent)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UIVRDisplayWidget: Cannot set texture, DisplayImage is null."));
+        // Primeiro, desinscreva-se do componente antigo, se houver, para evitar inscrições duplicadas
+        // ou chamadas de delegate para um objeto inválido.
+        if (LinkedCaptureComponent)
+        {
+            LinkedCaptureComponent->OnRealTimeFrameReady.RemoveDynamic(this, &UIVRDisplayWidget::OnRealTimeFrameReadyHandler);
+        }
+        
+        // Atribui o novo componente.
+        LinkedCaptureComponent = InCaptureComponent;
+        
+        // Se o novo componente é válido, inscreva-se no delegate.
+        // A textura CurrentLiveTexture será preenchida pela primeira vez quando o OnRealTimeFrameReadyHandler for chamado.
+        if (LinkedCaptureComponent)
+        {
+            LinkedCaptureComponent->OnRealTimeFrameReady.AddDynamic(this, &UIVRDisplayWidget::OnRealTimeFrameReadyHandler);
+        }
+        else
+        {
+            // Se o componente foi desvinculado (passaram um nullptr), limpe a textura.
+            CurrentLiveTexture = nullptr;
+        }
     }
 }
 
+void UIVRDisplayWidget::OnRealTimeFrameReadyHandler(const FIVR_JustRTFrame& FrameData)
+{
+    // Este método é chamado a cada vez que o UIVRCaptureComponent broadcasting um novo frame.
+    // A textura UTexture2D* que precisamos está dentro de FrameData.LiveTexture.
+    // Basta atribuí-la à nossa propriedade CurrentLiveTexture.
+    CurrentLiveTexture = FrameData.LiveTexture;
+
+    // IMPORTANTE: O UMG detecta automaticamente que a textura para a qual CurrentLiveTexture
+    // aponta foi atualizada (pois o UIVRCaptureComponent escreve novos pixels nela) e redesenha o Image.
+    // Não é necessário fazer mais nada aqui para que a imagem no UMG se atualize.
+
+    // Se você precisasse exibir metadados do frame (como largura, altura, ou dados de features),
+    // você poderia usar FrameData.Width, FrameData.Height, FrameData.Features, etc., para
+    // atualizar Text Blocks ou outros elementos da UI aqui.
+}

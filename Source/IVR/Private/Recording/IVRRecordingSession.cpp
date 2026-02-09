@@ -1,6 +1,6 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #include "Recording/IVRRecordingSession.h"
@@ -15,7 +15,7 @@
 #include "HAL/FileManager.h"
 #include "Async/Async.h" 
 
-// Implementa��o do LogCategory
+// Implementação do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRRecSession);
 
 UIVRRecordingSession::UIVRRecordingSession()
@@ -28,8 +28,8 @@ UIVRRecordingSession::UIVRRecordingSession()
 
 UIVRRecordingSession::~UIVRRecordingSession()
 {
-    // Garante que a grava��o seja interrompida e os recursos liberados.
-    // Apenas chame StopRecording se a sess�o estiver ativa, para evitar warnings desnecess�rios.
+    // Garante que a gravação seja interrompida e os recursos liberados.
+    // Apenas chame StopRecording se a sessão estiver ativa, para evitar warnings desnecessários.
     if (bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized()))
     {
         StopRecording(); 
@@ -41,19 +41,18 @@ UIVRRecordingSession::~UIVRRecordingSession()
         HasNewFrameEvent = nullptr;
     }
 }
-
 void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool)
 {
     UserRecordingSettings = InVideoSettings;
     
     FramePool = InFramePool;
-    if (!FramePool) // Verifica se o FramePool � v�lido
+    if (!FramePool) // Verifica se o FramePool é válido
     {
         UE_LOG(LogIVRRecSession, Error, TEXT("UIVRRecordingSession::Initialize: FramePool is null. Cannot initialize."));
         return;
     }
 
-    // Garante que o VideoEncoder seja inicializado uma �nica vez para esta sess�o/take.
+    // Garante que o VideoEncoder seja inicializado uma única vez para esta sessão/take.
     if (!VideoEncoder)
     {
         VideoEncoder = NewObject<UIVRVideoEncoder>(this);
@@ -62,8 +61,7 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
             UE_LOG(LogIVRRecSession, Error, TEXT("Failed to create UIVRVideoEncoder instance."));
             return;
         }
-
-        // Inicializa o VideoEncoder com as configura��es, o caminho do FFmpeg e a resolu��o real e o FramePool.
+        // Inicializa o VideoEncoder com as configurações, o caminho do FFmpeg e a resolução real e o FramePool.
         if (!VideoEncoder->Initialize(UserRecordingSettings, InFFmpegExecutablePath, InActualFrameWidth, InActualFrameHeight, FramePool)) 
         {
             UE_LOG(LogIVRRecSession, Error, TEXT("Failed to initialize UIVRVideoEncoder."));
@@ -77,7 +75,6 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
     
      UE_LOG(LogIVRRecSession, Log, TEXT("IVR Recording Session Initialized. FFmpeg Path: %s. Actual Frame Size: %dx%d"), *InFFmpegExecutablePath, InActualFrameWidth, InActualFrameHeight);
 }
-
 bool UIVRRecordingSession::StartRecording()
 {
     if (bIsRecording || bIsPaused)
@@ -100,9 +97,9 @@ bool UIVRRecordingSession::StartRecording()
     ClearQueues(); // Limpa as filas de frames
     
     // Gera o caminho completo para o take atual.
-    CurrentTakeFilePath = GenerateTakeFilePath(); 
+    CurrentTakeFilePath = GenerateTakeFilePath();
 
-    // Lan�a o processo FFmpeg atrav�s do VideoEncoder.
+    // Lança o processo FFmpeg através do VideoEncoder.
     // Passa o caminho do take atual para o encoder.
     if (!VideoEncoder->LaunchEncoder(CurrentTakeFilePath))
     {
@@ -115,7 +112,7 @@ bool UIVRRecordingSession::StartRecording()
         return false;
     }
 
-    // Inicia o thread de grava��o local (que apenas enfileira frames no VideoEncoder)
+    // Inicia o thread de gravação local (que apenas enfileira frames no VideoEncoder)
     RecordingThread = FRunnableThread::Create(this, TEXT("IVRecThread"), 0, TPri_Normal);
     if (!RecordingThread)
     {
@@ -127,14 +124,13 @@ bool UIVRRecordingSession::StartRecording()
         bIsRecording.AtomicSet(false);
         return false;
     }
-
     UE_LOG(LogIVRRecSession, Log, TEXT("FFmpeg recording session started for take: %s"), *CurrentTakeFilePath);
     return true; 
 }
 
 void UIVRRecordingSession::StopRecording()
 {
-    // Valida��o robusta para evitar warnings falsos ou tentar parar algo que j� est� parado.
+    // Validação robusta para evitar warnings falsos ou tentar parar algo que já está parado.
     bool bNeedsStopping = bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized());
 
     if (!bNeedsStopping)
@@ -154,13 +150,13 @@ void UIVRRecordingSession::StopRecording()
         HasNewFrameEvent->Trigger();
     }
 
-    // Primeiro, sinaliza ao VideoEncoder que n�o haver� mais frames para grava��o do take atual.
+    // Primeiro, sinaliza ao VideoEncoder que não haverá mais frames para gravação do take atual.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
         VideoEncoder->FinishEncoding();
     }
 
-    // Espera o thread de grava��o local terminar
+    // Espera o thread de gravação local terminar
     if (RecordingThread)
     {
         UE_LOG(LogIVRRecSession, Log, TEXT("Waiting for recording thread to complete..."));
@@ -170,18 +166,17 @@ void UIVRRecordingSession::StopRecording()
         UE_LOG(LogIVRRecSession, Log, TEXT("Recording thread stopped."));
     }
 
-    // Agora, desliga o processo principal do FFmpeg atrav�s do VideoEncoder.
+    // Agora, desliga o processo principal do FFmpeg através do VideoEncoder.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
         VideoEncoder->ShutdownEncoder();
     }
-
-    // Calcula a dura��o final da grava��o
+    // Calcula a duração final da gravação
     RecordingDuration = (FDateTime::Now() - StartTime).GetTotalSeconds();
     UE_LOG(LogIVRRecSession, Log, TEXT("Take recording stopped. Final duration: %.2f seconds. File intended for: %s"), RecordingDuration, *CurrentTakeFilePath);
     
-    // A valida��o se o arquivo foi realmente criado ser� feita pelo UIVRRecordingManager.
-    // NENHUMA L�GICA DE CONCATENA��O AQUI.
+    // A validação se o arquivo foi realmente criado será feita pelo UIVRRecordingManager.
+    // NENHUMA LÓGICA DE CONCATENAÇÃO AQUI.
 }
 
 void UIVRRecordingSession::PauseRecording()
@@ -201,7 +196,6 @@ void UIVRRecordingSession::ResumeRecording()
         UE_LOG(LogIVRRecSession, Log, TEXT("Recording session resumed for take: %s"), *SessionID);
     }
 }
-
 float UIVRRecordingSession::GetDuration() const
 {
     if (bIsRecording && !bIsPaused)
@@ -220,20 +214,19 @@ void UIVRRecordingSession::ClearQueues()
     VideoProducerQCounter = 0;
 }
 
-// Adiciona um frame de v�deo � fila. Timestamp j� � o tempo global.
+// Adiciona um frame de vídeo à fila. Timestamp já é o tempo global.
 void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mudada
 {
     if (!bIsRecording || bIsPaused) 
     {
-        // Se n�o estiver gravando ou estiver pausado, libera o frame imediatamente.
+        // Se não estiver gravando ou estiver pausado, libera o frame imediatamente.
         if (FramePool && Frame.RawDataPtr.IsValid())
         {
             FramePool->ReleaseFrame(Frame.RawDataPtr);
         }
         return;
     }
-
-    // Use a taxa de quadros alvo para estimar um limite de buffer mais preciso
+// Use a taxa de quadros alvo para estimar um limite de buffer mais preciso
     int32 MaxBufferedFrames = (UserRecordingSettings.FPS > 0) ? FMath::CeilToInt(UserRecordingSettings.FPS * 1.0f) : 30; 
     if (VideoProducerQCounter >= MaxBufferedFrames) 
     {
@@ -246,11 +239,10 @@ void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mu
         return; 
     }
 
-    // LOG DE DEBUG: Confirma o tamanho do frame que est� sendo enfileirado
+    // LOG DE DEBUG: Confirma o tamanho do frame que está sendo enfileirado
     UE_LOG(LogIVRRecSession, Warning, TEXT("UIVRRecordingSession: Enqueuing frame. RawDataPtr size: %d"), 
         Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0);
-
-    // Enfileira o frame para a worker thread processar. Usa MoveTemp para mover o TSharedPtr eficientemente.
+// Enfileira o frame para a worker thread processar. Usa MoveTemp para mover o TSharedPtr eficientemente.
     VideoFrameProducerQueue.Enqueue(MoveTemp(Frame)); 
     VideoProducerQCounter++;
 
@@ -266,6 +258,7 @@ FString UIVRRecordingSession::GenerateTakeFilePath()
     FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 
+    // C4: Garante que o diretório "Recordings" exista.
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
@@ -276,12 +269,14 @@ FString UIVRRecordingSession::GenerateTakeFilePath()
     return NewTakePath;
 }
 
+// C4: Ajuste para gerar o Master File Path de forma independente
 FString UIVRRecordingSession::GenerateMasterFilePath() const
 {
     FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
     FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 
+    // C4: Garante que o diretório "Recordings" exista.
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
@@ -302,7 +297,7 @@ bool UIVRRecordingSession::Init()
 uint32 UIVRRecordingSession::Run()
 {
     
-    FIVR_VideoFrame VideoFrame; // Onde o frame � dequeued
+    FIVR_VideoFrame VideoFrame; // Onde o frame é dequeued
     
     while (!bStopThread)
     {
@@ -320,13 +315,18 @@ uint32 UIVRRecordingSession::Run()
             else
             {
                 UE_LOG(LogIVRRecSession, Error, TEXT("IVRecThread: VideoEncoder is null. Dropping frame."));
+                // Garante que o frame seja liberado de volta ao pool mesmo se o encoder for nulo
+                if (FramePool && VideoFrame.RawDataPtr.IsValid())
+                {
+                    FramePool->ReleaseFrame(VideoFrame.RawDataPtr);
+                }
             }
         }
         
-        // Se a fila estiver vazia e o thread n�o for para parar, espera por um novo evento.
+        // Se a fila estiver vazia e o thread não for para parar, espera por um novo evento.
         if (VideoFrameProducerQueue.IsEmpty() && !bStopThread)
         {
-            HasNewFrameEvent->Wait(100); // Espera por at� 100ms por um novo frame ou sinal de parada
+            HasNewFrameEvent->Wait(100); // Espera por até 100ms por um novo frame ou sinal de parada
         }
     }
     
@@ -339,8 +339,15 @@ uint32 UIVRRecordingSession::Run()
             VideoEncoder->EncodeFrame(VideoFrame);
             VideoConsumerQCounter++;
         }
+        else
+        {
+             // Garante que o frame seja liberado de volta ao pool mesmo se o encoder for nulo durante o shutdown
+            if (FramePool && VideoFrame.RawDataPtr.IsValid())
+            {
+                FramePool->ReleaseFrame(VideoFrame.RawDataPtr);
+            }
+        }
     }
-
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Run loop finished."));
     return 0;
 }
@@ -354,4 +361,3 @@ void UIVRRecordingSession::Exit()
 {
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Exited."));
 }
-

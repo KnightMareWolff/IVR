@@ -1,14 +1,16 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copywright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #include "IVR_PipeWrapper.h"
 #include "IVRGlobalStatics.h" // Para o tratamento de erros
 #include "Misc/Guid.h" // Para gerar GUIDs
 #include "Misc/FileHelper.h" // Para FFileHelper::DeleteFile
+#include "HAL/PlatformMisc.h" // Para FPlatformMisc::GetLastError
+#include "Misc/Paths.h" // Para FPaths::GetTempDir
 
-// Defini��o de LogCategory
+// Definição de LogCategory
 DEFINE_LOG_CATEGORY(LogIVRPipeWrapper);
 
 // Constructor
@@ -20,14 +22,13 @@ FIVR_PipeWrapper::FIVR_PipeWrapper()
     PipeHandle = INVALID_HANDLE_VALUE;
 #elif PLATFORM_LINUX || PLATFORM_MAC
     FileDescriptor = -1;
-    PipeHandle = -1;
 #endif
 }
 
 // Destructor
 FIVR_PipeWrapper::~FIVR_PipeWrapper()
 {
-    Close(); // Garante que o pipe � fechado quando o objeto � destru�do
+    Close(); // Garante que o pipe é fechado quando o objeto é destruído
 }
 
 // Create Pipe
@@ -35,7 +36,7 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
 {
     if (IsValid())
     {
-        UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Pipe '%s' already created. Closing and recreating."), *FullPipePath);
+        UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Pipe '%s' já criado. Fechando e recriando."), *FullPipePath);
         Close();
     }
 
@@ -44,13 +45,13 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
 
     // Construir o caminho completo do pipe.
     // Para Windows: \.\pipe\<BasePipeName>_<SessionID>
-    // Para POSIX: /tmp/<BasePipeName>_<SessionID> (ou outro diret�rio tempor�rio seguro)
+    // Para POSIX: /tmp/<BasePipeName>_<SessionID> (ou outro diretório temporário seguro)
     FString UniquePipeName = FString::Printf(TEXT("%s%s"), *BasePipeName , *SessionID);
 
 #if PLATFORM_WINDOWS
     FullPipePath = FString::Printf(TEXT("\\\\.\\pipe\\%s"), *UniquePipeName);
 
-    DWORD OpenMode = PIPE_ACCESS_OUTBOUND; // UE escreve, FFmpeg l�
+    DWORD OpenMode = PIPE_ACCESS_OUTBOUND; // UE escreve, FFmpeg lê
     DWORD PipeMode = PIPE_TYPE_BYTE; // Modo byte stream
     if (Settings.bBlockingMode)
     {
@@ -58,29 +59,29 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     }
     else
     {
-        PipeMode |= PIPE_NOWAIT; // Modo n�o-bloqueante
+        PipeMode |= PIPE_NOWAIT; // Modo não-bloqueante
     }
 
-    DWORD CalculatedBufferSize = Settings.OutBufferSize; // Valor padr�o da PipeSettings
+    DWORD CalculatedBufferSize = Settings.OutBufferSize; // Valor padrão da PipeSettings
     if (InWidth > 0 && InHeight > 0)
     {
         // Assumindo BGRA (4 bytes por pixel)
         CalculatedBufferSize = InWidth * InHeight * 4;
-        // O Windows pode ter um limite m�ximo para o buffer de Named Pipes.
+        // O Windows pode ter um limite máximo para o buffer de Named Pipes.
         // Um valor muito grande pode ser internamente truncado.
-        // 8MB (para 1080p BGRA) � geralmente OK, mas � bom ter em mente.
+        // 8MB (para 1080p BGRA) é geralmente OK, mas é bom ter em mente.
     }
 
-    // Cria a inst�ncia do Named Pipe
+    // Cria a instância do Named Pipe
     PipeHandle = CreateNamedPipe(
         *FullPipePath,            // Nome do pipe
         OpenMode,                 // Modo de abertura
         PipeMode,                 // Modo do pipe
-        1,                        // N�mero m�ximo de inst�ncias
-        CalculatedBufferSize,     // Tamanho do buffer de sa�da
+        1,                        // Número máximo de instâncias
+        CalculatedBufferSize,     // Tamanho do buffer de saída
         CalculatedBufferSize,     // Tamanho do buffer de entrada
-        NMPWAIT_USE_DEFAULT_WAIT, // Timeout padr�o para cliente conectar
-        NULL);                    // Atributos de seguran�a (padr�o)
+        NMPWAIT_USE_DEFAULT_WAIT, // Timeout padrão para cliente conectar
+        NULL);                    // Atributos de segurança (padrão)
 
     FIVR_SystemErrorDetails Det = UIVRGlobalStatics::GetLastSystemErrorDetails();
     if (Det.ErrorCode != 0)
@@ -101,11 +102,13 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
 
 
 #elif PLATFORM_LINUX || PLATFORM_MAC
-    // FIFOs s�o arquivos no sistema de arquivos. Usar um diret�rio tempor�rio seguro.
-    FullPipePath = FPaths::Combine(FPaths::Get=+TempDir(), UniquePipeName);
+    // Para POSIX, usar um diretório temporário seguro dentro do projeto.
+    // FPaths::ProjectSavedDir() é um local garantido e adequado para arquivos temporários do plugin.
+    // Criamos um subdiretório para organizar os pipes temporários.
+    FullPipePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("IVRTemporaryPipes"), UniquePipeName);
 
-    // Tenta deletar o FIFO se ele j� existir, para garantir um novo come�o limpo.
-    // mkfifo falharia se o arquivo j� existisse.
+    // Tenta deletar o FIFO se ele já existir, para garantir um novo começo limpo.
+    // mkfifo falharia se o arquivo já existisse.
     if (access(TCHAR_TO_UTF8(*FullPipePath), F_OK) == 0)
     {
         unlink(TCHAR_TO_UTF8(*FullPipePath));
@@ -113,22 +116,22 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     }
 
     // Criar o FIFO (mkfifo)
-    // Permiss�es 0666 para read/write para owner, group, others.
+    // Permissões 0666 para read/write para owner, group, others.
     if (mkfifo(TCHAR_TO_UTF8(*FullPipePath), 0666) == -1)
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to create FIFO '%s'. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
         return false;
     }
     
-    // Abrir o FIFO para escrita. O_WRONLY para escrita, O_NONBLOCK para n�o bloquear no open.
-    // Se bBlockingMode for true, remove O_NONBLOCK para que open() bloqueie at� um leitor se conectar.
+    // Abrir o FIFO para escrita. O_WRONLY para escrita, O_NONBLOCK para não bloquear no open.
+    // Se bBlockingMode for true, remove O_NONBLOCK para que open() bloqueie até um leitor se conectar.
     int OpenFlags = O_WRONLY;
     if (!Settings.bBlockingMode)
     {
         OpenFlags |= O_NONBLOCK;
     }
 
-    // Abrir o FIFO. Isso pode bloquear se bBlockingMode for true e n�o houver leitor ainda.
+    // Abrir o FIFO. Isso pode bloquear se bBlockingMode for true e não houver leitor ainda.
     UE_LOG(LogIVR, Log, TEXT("Opening FIFO '%s' for writing... (will block if no reader)"), *FullPipePath);
     FileDescriptor = open(TCHAR_TO_UTF8(*FullPipePath), OpenFlags);
 
@@ -150,7 +153,7 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
 
 }
 
-// NOVO M�TODO DE CONEX�O
+// NOVO MÉTODO DE CONEXÃO
 bool FIVR_PipeWrapper::Connect()
 {
 #if PLATFORM_WINDOWS
@@ -162,9 +165,9 @@ bool FIVR_PipeWrapper::Connect()
 
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("Awaiting client connection for pipe: %s"), *FullPipePath);
 
-    // ConnectNamedPipe bloquear� at� que um cliente se conecte.
-    // ERROR_PIPE_CONNECTED significa que o pipe j� estava conectado (em caso de chamadas sucessivas),
-    // o que � um sucesso.
+    // ConnectNamedPipe bloqueará até que um cliente se conecte.
+    // ERROR_PIPE_CONNECTED significa que o pipe já estava conectado (em caso de chamadas sucessivas),
+    // o que é um sucesso.
     BOOL bSuccess = ConnectNamedPipe(PipeHandle, NULL);
     if (!bSuccess && GetLastError() != ERROR_PIPE_CONNECTED)
     {
@@ -178,8 +181,8 @@ bool FIVR_PipeWrapper::Connect()
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("Named Pipe '%s' connected successfully."), *FullPipePath);
     return true;
 #else
-    UE_LOG(LogIVRPipeWrapper, Error, TEXT("Connect() not implemented for non-Windows platforms."));
-    return false;
+    UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Connect() not explicitly implemented for non-Windows platforms. FIFOs POSIX connect via open(). Assuming connection if Create() was successful."));
+    return true; // Para POSIX, open() já bloqueia se não for NOWAIT, então consideramos conectado após Create().
 #endif
 }
 
@@ -190,7 +193,7 @@ int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
     if (!IsValid())
     {
         UE_LOG(LogIVR, Error, TEXT("Attempted to write to an invalid or uninitialized pipe."));
-        return false;
+        return -1;
     }
 
 #if PLATFORM_WINDOWS
@@ -198,28 +201,28 @@ int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
     if (!WriteFile(PipeHandle, Data, NumBytes, &BytesWritten, nullptr))
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to write to Windows Named Pipe. Error: %d"), GetLastError());
-        return false;
+        return -1;
     }
 
     if (BytesWritten != (DWORD)NumBytes)
     {
-        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Incomplete write to Named Pipe '%s'. Wrote %d bytes."), *FullPipePath, NumBytes);
-        return false;
+        UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Incomplete write to Named Pipe '%s'. Wrote %d bytes."), *FullPipePath, BytesWritten);
     }
 
-    return true;
+    return (int32)BytesWritten;
 
 #elif PLATFORM_LINUX || PLATFORM_MAC
     ssize_t BytesWritten = write(FileDescriptor, Data, NumBytes);
     if (BytesWritten == -1)
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to write to FIFO. Error: %s"), UTF8_TO_TCHAR(strerror(errno)));
-        return false;
+        return -1;
     }
-    return true;
+    return (int32)BytesWritten;
 
 #else // Outras plataformas
-    return false;
+    UE_LOG(LogIVR, Error, TEXT("FIVR_PipeWrapper::Write not implemented for this platform."));
+    return -1;
 #endif
 
 }
@@ -229,7 +232,7 @@ void FIVR_PipeWrapper::Close()
 {
     if (!IsValid())
     {
-        return; // J� fechado ou nunca foi v�lido
+        return; // Já fechado ou nunca foi válido
     }
 
 #if PLATFORM_WINDOWS
@@ -276,4 +279,3 @@ FString FIVR_PipeWrapper::GetFullPipeName() const
 {
     return FullPipePath;
 }
-

@@ -8,6 +8,21 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "HAL/PlatformMisc.h" 
+
+#if WITH_OPENCV
+#include "OpenCVHelper.h"
+#include "PreOpenCVHeaders.h"
+
+#undef check // the check macro causes problems with opencv headers
+#pragma warning(disable: 4668) // 'symbol' not defined as a preprocessor macro, replacing with '0' for 'directives'
+#pragma warning(disable: 4828) // The character set in the source file does not support the character used in the literal
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp> // Para cv::VideoCapture
+#include <opencv2/imgproc.hpp> // Para cv::cvtColor
+
+#include "PostOpenCVHeaders.h"
+#endif
+
 #include "IVRGlobalStatics.generated.h"
 
 // Defini��o da USTRUCT para empacotar os detalhes do erro

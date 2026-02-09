@@ -1,43 +1,39 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #include "Recording/IVRFolderFrameSource.h"
 #include "IVR.h"
+#include "IVRGlobalStatics.h"
 #include "Engine/World.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h" // For FFileHelper
 
-#if WITH_OPENCV
+// C2: Mover Includes do OpenCV para o escopo global do arquivo .cpp.
+// Este bloco foi movido do interior de LoadImageFromFile para aqui.
+#if WITH_OPENCV 
 #include "OpenCVHelper.h"
-#include "PreOpenCVHeaders.h"
+#include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
 
-#undef check // the check macro causes problems with opencv headers
-#pragma warning(disable: 4668) // 'symbol' not defined as a preprocessor macro, replacing with '0' for 'directives'
-#pragma warning(disable: 4828) // The character set in the source file does not support the character used in the literal
 #include <opencv2/opencv.hpp>
-#include <opencv2/videoio.hpp> // Para cv::VideoCapture
-#include <opencv2/imgproc.hpp> // Para cv::cvtColor
+// #include <opencv2/videoio.hpp> // Nao diretamente necessario aqui para este cpp
+#include <opencv2/imgproc.hpp> 
 
-#include "PostOpenCVHeaders.h"
+#include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
 #endif
-
-// Adicione "ImageWrapper" ao Build.cs do seu m�dulo:
-// PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ImageWrapper" });
 
 UIVRFolderFrameSource::UIVRFolderFrameSource()
     : UIVRFrameSource()
     , CurrentImageIndex(0)
 {
 }
-
 void UIVRFolderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& Settings, UIVRFramePool* InFramePool)
 {
     if (!World || !InFramePool)
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource::Initialize: World or FramePool is null."));
+        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource::Initialize: World ou FramePool é nulo."));
         return;
     }
     CurrentWorld = World;
@@ -49,20 +45,19 @@ void UIVRFolderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
 
     FString AbsoluteFolderPath = FPaths::Combine(FPaths::ProjectDir(), Settings.IVR_FramesFolder); // Assume caminho relativo ao projeto
 
-    // Garante que o caminho � absoluto e normalize
+    // Garante que o caminho é absoluto e normalize
     FPaths::NormalizeDirectoryName(AbsoluteFolderPath);
     
     if (!IFileManager::Get().DirectoryExists(*AbsoluteFolderPath))
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource: Folder '%s' does not exist!"), *AbsoluteFolderPath);
+        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource: Pasta '%s' não existe!"), *AbsoluteFolderPath);
         return;
     }
-
     // Busca arquivos de imagem na pasta
     TArray<FString> FoundFiles;
     IFileManager::Get().FindFiles(FoundFiles, *AbsoluteFolderPath, TEXT("*.*"));
 
-    // Filtra por extens�es de imagem suportadas
+    // Filtra por extensões de imagem suportadas
     TArray<FString> SupportedExtensions = { TEXT(".png"), TEXT(".jpg"), TEXT(".jpeg"), TEXT(".bmp"), TEXT(".tga"), TEXT(".exr") };
     for (const FString& File : FoundFiles)
     {
@@ -73,16 +68,15 @@ void UIVRFolderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
         }
     }
     
-    // Opcional: Ordenar os arquivos para garantir uma sequ�ncia correta
+    // Opcional: Ordenar os arquivos para garantir uma sequência correta
     ImageFiles.Sort();
-
     if (ImageFiles.Num() == 0)
     {
-        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: No supported image files found in folder '%s'."), *AbsoluteFolderPath);
+        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Nenhuns arquivos de imagem suportados encontrados na pasta '%s'."), *AbsoluteFolderPath);
     }
     else
     {
-        UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource initialized with %d image files from '%s'."), ImageFiles.Num(), *AbsoluteFolderPath);
+        UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource inicializado com %d arquivos de imagem de '%s'."), ImageFiles.Num(), *AbsoluteFolderPath);
     }
 }
 
@@ -92,7 +86,7 @@ void UIVRFolderFrameSource::Shutdown()
     ImageFiles.Empty();
     CurrentWorld = nullptr;
     FramePool = nullptr;
-    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource Shutdown."));
+    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource Encerrado."));
 }
 
 void UIVRFolderFrameSource::StartCapture()
@@ -100,14 +94,13 @@ void UIVRFolderFrameSource::StartCapture()
     if (!CurrentWorld) return;
     if (ImageFiles.Num() == 0)
     {
-        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Cannot start capture, no image files found."));
+        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Não é possível iniciar a captura, nenhuns arquivos de imagem encontrados."));
         return;
     }
-
     float Delay = (FrameSourceSettings.IVR_FolderPlaybackFPS > 0.0f) ? (1.0f / FrameSourceSettings.IVR_FolderPlaybackFPS) : (1.0f / 30.0f);
     CurrentWorld->GetTimerManager().SetTimer(FrameReadTimerHandle, this, &UIVRFolderFrameSource::ReadNextFrameFromFile, Delay, true);
-    // Log atualizado para mostrar a dura��o por imagem
-    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Starting frame reading from folder. Images will change every %.2f seconds (based on IVR_FolderPlaybackFPS of %.2f)."), Delay, FrameSourceSettings.IVR_FolderPlaybackFPS);
+    // Log atualizado para mostrar a duração por imagem
+    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Iniciando leitura de frames da pasta. Imagens mudarão a cada %.2f segundos (baseado no IVR_FolderPlaybackFPS de %.2f)."), Delay, FrameSourceSettings.IVR_FolderPlaybackFPS);
 }
 
 void UIVRFolderFrameSource::StopCapture()
@@ -117,15 +110,14 @@ void UIVRFolderFrameSource::StopCapture()
         CurrentWorld->GetTimerManager().ClearTimer(FrameReadTimerHandle);
     }
     FrameReadTimerHandle.Invalidate();
-    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Stopped frame reading."));
+    UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Leitura de frames parada."));
 }
-
 void UIVRFolderFrameSource::ReadNextFrameFromFile()
 {
     if (ImageFiles.Num() == 0)
     {
         StopCapture();
-        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: No more image files to read. Stopping capture."));
+        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Nenhuns arquivos de imagem restantes para ler. Parando captura."));
         return;
     }
 
@@ -135,21 +127,20 @@ void UIVRFolderFrameSource::ReadNextFrameFromFile()
         if (FrameSourceSettings.IVR_LoopFolderPlayback)
         {
             CurrentImageIndex = 0; // Reinicia o loop
-            UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Looping folder playback."));
+            UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Looping na reprodução da pasta."));
         }
         else
         {
             StopCapture();
-            UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Folder playback finished (no looping)."));
+            UE_LOG(LogIVRFrameSource, Log, TEXT("UIVRFolderFrameSource: Reprodução da pasta finalizada (sem loop)."));
             return;
         }
     }
-
     TSharedPtr<TArray<uint8>> FrameBuffer = AcquireFrameBufferFromPool();
     if (!FrameBuffer.IsValid())
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("Failed to acquire frame buffer from pool. Dropping folder frame."));
-        CurrentImageIndex++; // Move para o pr�ximo mesmo se falhar a aquisi��o do buffer
+        UE_LOG(LogIVRFrameSource, Error, TEXT("Falha ao adquirir buffer de frame do pool. Descartando frame da pasta."));
+        CurrentImageIndex++; // Move para o próximo mesmo se falhar a aquisição do buffer
         return;
     }
 
@@ -158,13 +149,12 @@ void UIVRFolderFrameSource::ReadNextFrameFromFile()
     {
         FIVR_VideoFrame NewFrame(FrameSourceSettings.Width, FrameSourceSettings.Height, CurrentWorld->GetTimeSeconds());
         NewFrame.RawDataPtr = FrameBuffer;
-
-        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Read frame %d from '%s'."), CurrentImageIndex, *ImageFiles[CurrentImageIndex]);
+        UE_LOG(LogIVRFrameSource, Warning, TEXT("UIVRFolderFrameSource: Leu frame %d de '%s'."), CurrentImageIndex, *ImageFiles[CurrentImageIndex]);
         OnFrameAcquired.Broadcast(MoveTemp(NewFrame));
     }
     else
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource: Failed to load image from '%s'. Skipping frame."), *ImageFiles[CurrentImageIndex]);
+        UE_LOG(LogIVRFrameSource, Error, TEXT("UIVRFolderFrameSource: Falha ao carregar imagem de '%s'. Pulando frame."), *ImageFiles[CurrentImageIndex]);
         // Libera o buffer de volta para o pool se a carga falhar
         FramePool->ReleaseFrame(FrameBuffer);
     }
@@ -177,26 +167,24 @@ bool UIVRFolderFrameSource::LoadImageFromFile(const FString& FilePath, TArray<ui
     TArray<uint8> CompressedData;
     if (!FFileHelper::LoadFileToArray(CompressedData, *FilePath))
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("Failed to load image file to array: %s"), *FilePath);
+        UE_LOG(LogIVRFrameSource, Error, TEXT("Falha ao carregar arquivo de imagem para array: %s"), *FilePath);
         return false;
     }
-
     TSharedPtr<IImageWrapper> ImageWrapper = GetImageWrapperByExtention(FilePath);
     if (!ImageWrapper.IsValid())
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("Failed to create image wrapper for format: (%s)"), *FilePath);
+        UE_LOG(LogIVRFrameSource, Error, TEXT("Falha ao criar wrapper de imagem para o formato: (%s)"), *FilePath);
         return false;
     }
 
     if (!ImageWrapper->SetCompressed(CompressedData.GetData(), CompressedData.Num()))
     {
-        UE_LOG(LogIVRFrameSource, Error, TEXT("Failed to set compressed data or decompress image for: %s"), *FilePath);
+        UE_LOG(LogIVRFrameSource, Error, TEXT("Falha ao definir dados compactados ou descomprimir imagem para: %s"), *FilePath);
         return false;
     }
 
     TArray<uint8> DecompressedData;
     ERGBFormat ImageFormatToUse = ERGBFormat::BGRA; // Prioriza BGRA
-
     // Tenta obter BGRA diretamente
     if (!ImageWrapper->GetRaw(ImageFormatToUse, 8, DecompressedData))
     {
@@ -205,19 +193,18 @@ bool UIVRFolderFrameSource::LoadImageFromFile(const FString& FilePath, TArray<ui
         if (!ImageWrapper->GetRaw(ImageFormatToUse, 8, DecompressedData))
         {
             // Se ambos falharam
-            UE_LOG(LogIVRFrameSource, Error, TEXT("Failed to get raw image data (BGRA or RGBA) for: %s"), *FilePath);
+            UE_LOG(LogIVRFrameSource, Error, TEXT("Falha ao obter dados brutos da imagem (BGRA ou RGBA) para: %s"), *FilePath);
             return false;
         }
     }
 
-    // Se a descompress�o foi para RGBA, converte para BGRA
+    // Se a descompressão foi para RGBA, converte para BGRA
     if (ImageFormatToUse == ERGBFormat::RGBA)
     {
         const int32 NumPixels = ImageWrapper->GetWidth() * ImageWrapper->GetHeight();
         TArray<uint8> BGRATempData;
-        BGRATempData.SetNumUninitialized(NumPixels * 4); // Alocar para a sa�da BGRA
-
-        // Convers�o manual de RGBA para BGRA (trocar canais R e B)
+        BGRATempData.SetNumUninitialized(NumPixels * 4); // Alocar para a saída BGRA
+        // Conversão manual de RGBA para BGRA (trocar canais R e B)
         for (int32 i = 0; i < NumPixels; ++i)
         {
             BGRATempData[i * 4 + 0] = DecompressedData[i * 4 + 2]; // Blue (do R do RGBA)
@@ -228,66 +215,61 @@ bool UIVRFolderFrameSource::LoadImageFromFile(const FString& FilePath, TArray<ui
         DecompressedData = MoveTemp(BGRATempData); // Substitui os dados RGBA pelos BGRA
     }
 
-#if WITH_OPENCV
+#if WITH_OPENCV // AGORA O CÓDIGO OpenCV SÓ EXISTE AQUI (includes estão no global)
     // Converter o TArray<uint8> para cv::Mat (tipo esperado pelo OpenCV)
     cv::Mat OriginalImageMat(ImageWrapper->GetHeight(), ImageWrapper->GetWidth(), CV_8UC4, DecompressedData.GetData());
 
-    // Verificar se as dimens�es da imagem original correspondem �s dimens�es alvo
+    // Verificar se as dimensões da imagem original correspondem às dimensões alvo
     if (OriginalImageMat.cols != FrameSourceSettings.Width || OriginalImageMat.rows != FrameSourceSettings.Height)
     {
-        UE_LOG(LogIVRFrameSource, Warning, TEXT("Image dimensions (%dx%d) do not match target (%dx%d) for %s. Resizing..."),
-            OriginalImageMat.cols, OriginalImageMat.rows, FrameSourceSettings.Width, FrameSourceSettings.Height, *FilePath);
+        UE_LOG(LogIVRFrameSource, Warning, TEXT("Dimensões da imagem (%dx%d) não correspondem às do alvo (%dx%d) para %s. Redimensionando..."),
+               OriginalImageMat.cols, OriginalImageMat.rows, FrameSourceSettings.Width, FrameSourceSettings.Height, *FilePath);
 
         cv::Mat ResizedImageMat;
         cv::resize(OriginalImageMat, ResizedImageMat, cv::Size(FrameSourceSettings.Width, FrameSourceSettings.Height), 0, 0, cv::INTER_AREA);
-
         // Copiar os dados da cv::Mat redimensionada para OutRawData
         OutRawData.SetNumUninitialized(ResizedImageMat.total() * ResizedImageMat.elemSize());
         FMemory::Memcpy(OutRawData.GetData(), ResizedImageMat.data, ResizedImageMat.total() * ResizedImageMat.elemSize());
     }
     else
     {
-        // Se as dimens�es j� correspondem, apenas move os dados descompactados para OutRawData
+        // Se as dimensões já correspondem, apenas move os dados descompactados para OutRawData
         OutRawData = MoveTemp(DecompressedData);
     }
 #else
-    // Se OpenCV n�o estiver habilitado, apenas move os dados descompactados (sem redimensionar)
-    UE_LOG(LogIVRFrameSource, Warning, TEXT("OpenCV is not enabled. Image resizing for %s will be skipped."), *FilePath);
+    // Se OpenCV não estiver habilitado, apenas move os dados descompactados (sem redimensionar)
+    UE_LOG(LogIVRFrameSource, Warning, TEXT("OpenCV não habilitado. O redimensionamento de imagem para %s será pulado."), *FilePath);
     OutRawData = MoveTemp(DecompressedData);
 #endif
 
     return true; // Imagem carregada, convertida e redimensionada (se OpenCV ativo) com sucesso.
 }
-
-TSharedPtr<IImageWrapper> UIVRFolderFrameSource::GetImageWrapperByExtention(const FString InImagePath)
+TSharedPtr<IImageWrapper> UIVRFolderFrameSource::GetImageWrapperByExtention(FString InImagePath)
 {
         IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
-		if (InImagePath.EndsWith(".png"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
-		}
-		else if (InImagePath.EndsWith(".jpg") || InImagePath.EndsWith(".jpeg"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::JPEG);
-		}
-		else if (InImagePath.EndsWith(".bmp"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::BMP);
-		}
-		else if (InImagePath.EndsWith(".ico"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICO);
-		}
-		else if (InImagePath.EndsWith(".exr"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::EXR);
-		}
-		else if (InImagePath.EndsWith(".icns"))
-		{
-			return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICNS);
-		}
-
-		return nullptr;
+        if (InImagePath.EndsWith(".png"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        }
+        else if (InImagePath.EndsWith(".jpg") || InImagePath.EndsWith(".jpeg"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::JPEG);
+        }
+        else if (InImagePath.EndsWith(".bmp"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::BMP);
+        }
+        else if (InImagePath.EndsWith(".ico"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICO);
+        }
+        else if (InImagePath.EndsWith(".exr"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::EXR);
+        }
+        else if (InImagePath.EndsWith(".icns"))
+        {
+            return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICNS);
+        }
+return nullptr;
 }
-
-
