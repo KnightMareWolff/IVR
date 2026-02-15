@@ -9,7 +9,7 @@
 #include "UObject/NoExportTypes.h"
 #include "Containers/Queue.h"
 #include "Templates/SharedPointer.h"
-#include "Core/IVRTypes.h" // Para FIVR_VideoFrame e TArray<uint8>
+#include "IVRTypes.h" // Para FIVR_VideoFrame e TArray<uint8>
 
 #include "IVRFramePool.generated.h"
 
@@ -20,7 +20,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogIVRFramePool, Log, All);
  * Acesso thread-safe garantido pela TQueue.
  */
 UCLASS()
-class IVR_API UIVRFramePool : public UObject
+class IVRCORE_API UIVRFramePool : public UObject
 {
     GENERATED_BODY()
 

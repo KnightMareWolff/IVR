@@ -1,8 +1,6 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
 // This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #include "Components/IVRCaptureComponent.h"
 #include "IVRGlobalStatics.h"
 #include "Recording/IVRRecordingManager.h" 
@@ -18,19 +16,17 @@
 
 #include "Engine/Texture2D.h" 
 #include "RenderingThread.h"
-
 #include "Async/Async.h" // Para AsyncTask
 
-// C2: Mover Includes do OpenCV para o escopo global do arquivo .cpp.
-#if WITH_OPENCV
-#include "OpenCVHelper.h"
-#include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
+// [MANUAL_REF_POINT] Includes do OpenCV foram movidos para IVROpenCVBridge.
+// Incluindo o bridge para chamar as funções OpenCV nativas
+#include "IVROpenCVGlobals.h"
+// Forward declarations de FRunnables que agora estão em IVROpenCVBridge
+// UIVRVideoEncoder usará FVideoEncoderWorker, então precisa do .h dele
+#include "FVideoEncoderWorker.h" 
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/imgproc.hpp>
-
-#include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
-#endif
+class UIVRFramePool;
+struct FIVR_JustRTFrame;
 
 UIVRCaptureComponent::UIVRCaptureComponent()
 {
@@ -43,7 +39,6 @@ UIVRCaptureComponent::UIVRCaptureComponent()
     ActualFrameHeight = 0;
     RealTimeOutputTexture2D = nullptr; 
 }
-
 void UIVRCaptureComponent::BeginDestroy()
 {
     if (CurrentFrameSource && CurrentFrameSource->IsValidLowLevelFast())
@@ -95,7 +90,6 @@ void UIVRCaptureComponent::BeginPlay()
             ExistingCaptureComp = OwnerActor->FindComponentByClass<USceneCaptureComponent2D>();
             ExistingCineCamComp = OwnerActor->FindComponentByClass<UCineCameraComponent>();
         }
-
         if (ExistingCaptureComp)
         {
             OwnedVideoCaptureComponent = ExistingCaptureComp;
@@ -147,7 +141,6 @@ void UIVRCaptureComponent::BeginPlay()
                 UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: Failed to create new default USceneCaptureComponent2D. RenderTarget capture will likely fail."));
             }
         }
-
         if (OwnedVideoCaptureComponent)
         {
             OwnedVideoCaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
@@ -171,7 +164,6 @@ void UIVRCaptureComponent::BeginPlay()
         Cast<UIVRRenderFrameSource>(CurrentFrameSource)->Initialize(GetWorld(), VideoSettings, FramePool, OwnedVideoCaptureComponent);
     }
     break;
-
     case EIVRFrameSourceType::Folder:
     {
         CurrentFrameSource = NewObject<UIVRFolderFrameSource>(this);
@@ -192,7 +184,6 @@ void UIVRCaptureComponent::BeginPlay()
         Cast<UIVRWebcamFrameSource>(CurrentFrameSource)->Initialize(GetWorld(), VideoSettings, FramePool);
     }
     break;
-
     default:
     {
         UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: Unknown FrameSourceType selected (%d). Defaulting to RenderTarget."), (int32)VideoSettings.FrameSourceType);
@@ -201,7 +192,6 @@ void UIVRCaptureComponent::BeginPlay()
         AActor* OwnerActor = GetOwner(); 
         USceneCaptureComponent2D* ExistingCaptureComp = nullptr;
         UCineCameraComponent* ExistingCineCamComp = nullptr;
-
         if (OwnerActor)
         {
             ExistingCaptureComp = OwnerActor->FindComponentByClass<USceneCaptureComponent2D>();
@@ -259,7 +249,6 @@ void UIVRCaptureComponent::BeginPlay()
     }
     break;
     } // Fim do switch
-
     if (CurrentFrameSource)
     {
         if (UIVRWebcamFrameSource* WebcamSource = Cast<UIVRWebcamFrameSource>(CurrentFrameSource))
@@ -316,7 +305,6 @@ void UIVRCaptureComponent::BeginPlay()
         UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: Falha ao criar CurrentFrameSource. A gravação não funcionará corretamente."));
     }
 }
-
 void UIVRCaptureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     StopRecording();
@@ -329,7 +317,6 @@ void UIVRCaptureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     OwnedVideoCaptureComponent = nullptr; 
     Super::EndPlay(EndPlayReason); 
 }
-
 void UIVRCaptureComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -349,7 +336,6 @@ void UIVRCaptureComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
             VideoSettings.IVR_FollowActor = nullptr;
         }
     }
-
     if (bIsRecording) 
     {
         if (CurrentFrameSource && VideoSettings.FrameSourceType == EIVRFrameSourceType::RenderTarget)
@@ -372,7 +358,6 @@ void UIVRCaptureComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
         }
     }
 }
-
 void UIVRCaptureComponent::StartRecording()
 {
     AsyncTask(ENamedThreads::GameThread, [this]()
@@ -564,7 +549,6 @@ void UIVRCaptureComponent::PauseTake()
             }
         });
 }
-
 void UIVRCaptureComponent::ResumeTake()
 {
     AsyncTask(ENamedThreads::GameThread, [this]()
@@ -589,7 +573,6 @@ void UIVRCaptureComponent::StartNewTake()
         UIVRRecordingManager::Get()->StopRecording(CurrentSession);
         CurrentSession = nullptr; 
     }
-
     CurrentSession = UIVRRecordingManager::Get()->StartRecording(VideoSettings, ActualFrameWidth, ActualFrameHeight, FramePool);
     if (!CurrentSession)
     {
@@ -613,7 +596,6 @@ void UIVRCaptureComponent::EndCurrentTake()
         UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Take %d finalizado."), CurrentTakeNumber);
     }
 }
-
 void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
 {
     if (bIsRecording)
@@ -672,16 +654,45 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
                 CameraFOV = OwnedVideoCaptureComponent->FOVAngle;
             }
             
-            ProcessFrameAndFeaturesAsync(
-                FrameOutput,
+             // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
+            FIVROCV_ExtractedFeatures TempExtractedFeatures;
+
+            // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
+            IVROpenCVBridge::ProcessFrameAndExtractFeatures(
+                FrameOutput.RawDataBuffer.GetData(), // Passar o ponteiro bruto para os pixels
+                FrameOutput.Width,
+                FrameOutput.Height,
                 CameraTransform,
                 CameraFOV,
-                FramePool,
                 VideoSettings.IVR_GFTT_MaxCorners,
                 VideoSettings.IVR_GFTT_QualityLevel,
                 VideoSettings.IVR_GFTT_MinDistance,
-                VideoSettings.IVR_DebugDrawFeatures
-            );
+                VideoSettings.IVR_DebugDrawFeatures,
+                TempExtractedFeatures // A struct de saída
+             );
+
+            // Agora copiar os resultados da struct temporária para a FIVR_JustRTFrame original
+            // Fazer a conversão de FIVROCV_InterestPoint para FIVR_JustRTPoint
+            FrameOutput.Features.JustRTInterestPoints.Empty();
+            for (const FIVROCV_InterestPoint& OCVPoint : TempExtractedFeatures.InterestPoints)
+            {
+                FIVR_JustRTPoint RTPoint; // Esta struct ainda é do IVRCore
+                RTPoint.Point2D = OCVPoint.Point2D;
+                RTPoint.Point3D = OCVPoint.Point3D;
+                RTPoint.Direction = OCVPoint.Direction;
+                RTPoint.Size2D = OCVPoint.Size2D;
+                RTPoint.Angle = OCVPoint.Angle;
+                RTPoint.IsQuad = OCVPoint.IsQuad;
+                FrameOutput.Features.JustRTInterestPoints.Add(RTPoint);
+            }
+            FrameOutput.Features.BiggestPointIndex = TempExtractedFeatures.BiggestPointIndex;
+            FrameOutput.Features.SmallerPointIndex = TempExtractedFeatures.SmallerPointIndex;
+            FrameOutput.Features.NumOfQuads = TempExtractedFeatures.NumOfQuads;
+            FrameOutput.Features.NumOfRectangles = TempExtractedFeatures.NumOfRectangles;
+            FrameOutput.Features.HistogramRed = TempExtractedFeatures.HistogramRed;
+            FrameOutput.Features.HistogramGreen = TempExtractedFeatures.HistogramGreen;
+            FrameOutput.Features.HistogramBlue = TempExtractedFeatures.HistogramBlue;
+
         }
     }
     else 
@@ -693,7 +704,6 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
         }
     }
 }
-
 void UIVRCaptureComponent::UpdateTextureFromRawData(UTexture2D* Texture, const TArray<uint8>& RawData, int32 InWidth, int32 InHeight)
 {
     if (!Texture || !Texture->IsValidLowLevelFast() || !Texture->GetResource())
@@ -708,7 +718,6 @@ void UIVRCaptureComponent::UpdateTextureFromRawData(UTexture2D* Texture, const T
                Texture->GetSizeX(), Texture->GetSizeY(), InWidth, InHeight);
         return; 
     }
-
     if (RawData.Num() != InWidth * InHeight * sizeof(FColor))
     {
         UE_LOG(LogIVR, Error, TEXT("UpdateTextureFromRawData: RawData size mismatch! Actual: %d, Expected: %d. Frame descartado."), RawData.Num(), InWidth * InHeight * sizeof(FColor));
@@ -716,7 +725,6 @@ void UIVRCaptureComponent::UpdateTextureFromRawData(UTexture2D* Texture, const T
     }
     uint8* MipData = new uint8[RawData.Num()];
     FMemory::Memcpy(MipData, RawData.GetData(), RawData.Num());
-
     FUpdateTextureRegion2D Region(0, 0, 0, 0, InWidth, InHeight);
     ENQUEUE_RENDER_COMMAND(UpdateTextureFromRawDataCommand)(
         [Texture, Region, InWidth, MipData](FRHICommandListImmediate& RHICmdList)
@@ -746,13 +754,11 @@ void UIVRCaptureComponent::UpdateTextureFromRawData(UTexture2D* Texture, const T
 FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVideoPath, const FString& OutPreparedVideoPath, bool bOverwrite)
 {
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-
     if (!PlatformFile.FileExists(*InSourceVideoPath))
     {
         UE_LOG(LogIVR, Error, TEXT("PrepareVideoForRecording: Arquivo de vídeo de origem não encontrado em: %s"), *InSourceVideoPath);
         return FString();
     }
-
     if (PlatformFile.FileExists(*OutPreparedVideoPath) && !bOverwrite)
     {
         UE_LOG(LogIVR, Log, TEXT("PrepareVideoForRecording: Vídeo preparado já existe em: %s e sobrescrita desabilitada. Usando arquivo existente."), *OutPreparedVideoPath);
@@ -770,7 +776,6 @@ FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVi
     return FString();
 #endif
     FPaths::NormalizeDirectoryName(FFmpegPath);
-
     if (!PlatformFile.FileExists(*FFmpegPath))
     {
         UE_LOG(LogIVR, Error, TEXT("PrepareVideoForRecording: Executável FFmpeg não encontrado em: %s. Não é possível transcodificar vídeo."), *FFmpegPath);
@@ -783,7 +788,6 @@ FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVi
     );
 
     UE_LOG(LogIVR, Log, TEXT("PrepareVideoForRecording: Transcodificando vídeo. Executável: %s, Argumentos: %s"), *FFmpegPath, *FFmpegArguments);
-
     if (!UIVRRecordingManager::Get()->LaunchFFmpegProcessBlocking(FFmpegPath, FFmpegArguments))
     {
         UE_LOG(LogIVR, Error, TEXT("PrepareVideoForRecording: Transcodificação de vídeo falhou para: %s"), *InSourceVideoPath);
@@ -800,13 +804,11 @@ FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVi
 FString UIVRCaptureComponent::ExportVideoToCompatibleFormat(const FString& InSourceVideoPath, const FString& OutCompatibleVideoPath, bool bOverwrite, const FIVR_VideoSettings& EncodingSettings)
 {
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-
     if (!PlatformFile.FileExists(*InSourceVideoPath))
     {
         UE_LOG(LogIVR, Error, TEXT("ExportVideoToCompatibleFormat: Arquivo de vídeo de origem não encontrado em: %s"), *InSourceVideoPath);
         return FString();
     }
-
     if (PlatformFile.FileExists(*OutCompatibleVideoPath) && !bOverwrite)
     {
         UE_LOG(LogIVR, Log, TEXT("ExportVideoToCompatibleFormat: Vídeo compatível já existe em: %s e sobrescrita desabilitada. Usando arquivo existente."), *OutCompatibleVideoPath);
@@ -824,7 +826,6 @@ FString UIVRCaptureComponent::ExportVideoToCompatibleFormat(const FString& InSou
     return FString();
 #endif
     FPaths::NormalizeDirectoryName(FFmpegPath);
-
     if (!PlatformFile.FileExists(*FFmpegPath))
     {
         UE_LOG(LogIVR, Error, TEXT("ExportVideoToCompatibleFormat: Executável FFmpeg não encontrado em: %s. Não é possível transcodificar vídeo."), *FFmpegPath);
@@ -839,7 +840,6 @@ FString UIVRCaptureComponent::ExportVideoToCompatibleFormat(const FString& InSou
         EncodingSettings.FPS,           
         *OutCompatibleVideoPath         
     );
-
     UE_LOG(LogIVR, Log, TEXT("ExportVideoToCompatibleFormat: Transcodificando vídeo. Executável: %s, Argumentos: %s"), *FFmpegPath, *FFmpegArguments);
     if (!UIVRRecordingManager::Get()->LaunchFFmpegProcessBlocking(FFmpegPath, FFmpegArguments))
     {
@@ -857,148 +857,26 @@ void UIVRCaptureComponent::ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFr
 {
     AsyncTask(ENamedThreads::AnyBackgroundHiPriTask, [InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures, this]() mutable
     {
-        #if WITH_OPENCV 
-                
-        if (InOutFrame.RawDataBuffer.Num() > 0)
-        {
-            cv::Mat InputMat(InOutFrame.Height, InOutFrame.Width, CV_8UC4, InOutFrame.RawDataBuffer.GetData());
+        // [MANUAL_REF_POINT] A lógica de processamento OpenCV foi movida para IVROpenCVBridge::ProcessFrameAndExtractFeatures.
+        // Chame a função apropriada do IVROpenCVBridge aqui, passando os parâmetros necessários.
+        //IVROpenCVBridge::ProcessFrameAndExtractFeatures(InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures);
+        // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
+        // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
+        FIVROCV_ExtractedFeatures TempExtractedFeatures;
+        IVROpenCVBridge::ProcessFrameAndExtractFeatures(
+                InOutFrame.RawDataBuffer.GetData(), // Passar o ponteiro bruto para os pixels
+                InOutFrame.Width,
+                InOutFrame.Height,
+                CameraTransform,
+                CameraFOV,
+                VideoSettings.IVR_GFTT_MaxCorners,
+                VideoSettings.IVR_GFTT_QualityLevel,
+                VideoSettings.IVR_GFTT_MinDistance,
+                VideoSettings.IVR_DebugDrawFeatures,
+                TempExtractedFeatures // A struct de saída
+             );
 
-            cv::Mat GrayMat;
-            cv::cvtColor(InputMat, GrayMat, cv::COLOR_BGRA2GRAY);
-            cv::Mat BinaryMat;
-            cv::adaptiveThreshold(GrayMat, BinaryMat, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY_INV, 11, 2);
-            std::vector<cv::Point2f> OpenCVInterestPoints;
-            cv::goodFeaturesToTrack(GrayMat, OpenCVInterestPoints, MaxCorners, QualityLevel, MinDistance);
-
-            std::vector<std::vector<cv::Point>> Contours;
-            cv::findContours(BinaryMat, Contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
-
-            float MaxShapeArea = FLT_MIN;
-            int32 MaxShapeIndex = INDEX_NONE;
-            float MinShapeArea = FLT_MAX;
-            int32 MinShapeIndex = INDEX_NONE;
-            
-            int32 QuadsCount = 0;
-            int32 RectanglesCount = 0;
-
-            std::vector<cv::RotatedRect> AllDetectedShapesForDrawing;
-            for (const auto& Contour : Contours)
-            {
-                double contourArea = cv::contourArea(Contour);
-                if (contourArea < 100.0 || contourArea > (InputMat.cols * InputMat.rows * 0.9))
-                {
-                    continue;
-                }
-
-                std::vector<cv::Point> Approx;
-                cv::approxPolyDP(Contour, Approx, cv::arcLength(Contour, true) * 0.02, true);
-                if (Approx.size() == 4 && cv::isContourConvex(Approx))
-                {
-                    cv::Rect BoundingRect = cv::boundingRect(Approx);
-                    
-                    FIVR_JustRTPoint ShapeData;
-                    ShapeData.Point2D = FVector2D(BoundingRect.x + BoundingRect.width / 2.0f, BoundingRect.y + BoundingRect.height / 2.0f); 
-                    ShapeData.Size2D = FVector2D(BoundingRect.width, BoundingRect.height);
-
-                    cv::RotatedRect RotatedRect = cv::minAreaRect(Contour);
-                    ShapeData.Angle = RotatedRect.angle;
-                    const float SquareTolerance = 0.15f;
-                    if (BoundingRect.height > 0)
-                    {
-                        float AspectRatio = (float)BoundingRect.width / BoundingRect.height;
-                        if (FMath::Abs(AspectRatio - 1.0f) < SquareTolerance)
-                        {
-                            ShapeData.IsQuad = true;
-                            QuadsCount++;
-                        }
-                        else
-                        {
-                            ShapeData.IsQuad = false;
-                            RectanglesCount++;
-                        }
-                    }
-                    else
-                    {
-                        ShapeData.IsQuad = false;
-                    }
-                    DeprojectPixelToWorld(ShapeData.Point2D, CameraTransform, CameraFOV, FIntPoint(InOutFrame.Width, InOutFrame.Height), ShapeData.Point3D, ShapeData.Direction);
-                    
-                    InOutFrame.Features.JustRTInterestPoints.Add(ShapeData);
-                    AllDetectedShapesForDrawing.push_back(RotatedRect);
-                    if (contourArea > MaxShapeArea)
-                    {
-                        MaxShapeArea = contourArea;
-                        MaxShapeIndex = InOutFrame.Features.JustRTInterestPoints.Num() - 1;
-                    }
-                    if (contourArea < MinShapeArea)
-                    {
-                        MinShapeArea = contourArea;
-                        MinShapeIndex = InOutFrame.Features.JustRTInterestPoints.Num() - 1;
-                    }
-                }
-            }
-
-            InOutFrame.Features.BiggestPointIndex = MaxShapeIndex;
-            InOutFrame.Features.SmallerPointIndex = MinShapeIndex;
-            InOutFrame.Features.NumOfQuads = QuadsCount;
-            InOutFrame.Features.NumOfRectangles = RectanglesCount;
-            std::vector<cv::Mat> BGRChannels(3); 
-            cv::split(InputMat, BGRChannels); 
-
-            int HistSize = 256; 
-            float Range[] = {0, 256}; 
-            const float* HistRange = {Range};
-            bool Uniform = true; 
-            bool Accumulate = false; 
-
-            cv::Mat B_hist, G_hist, R_hist;
-            cv::calcHist(&BGRChannels[0], 1, 0, cv::Mat(), B_hist, 1, &HistSize, &HistRange, Uniform, Accumulate);
-            cv::calcHist(&BGRChannels[1], 1, 0, cv::Mat(), G_hist, 1, &HistSize, &HistRange, Uniform, Accumulate);
-            cv::calcHist(&BGRChannels[2], 1, 0, cv::Mat(), R_hist, 1, &HistSize, &HistRange, Uniform, Accumulate);
-
-            cv::normalize(B_hist, B_hist, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
-            cv::normalize(G_hist, G_hist, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
-            cv::normalize(R_hist, R_hist, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
-            InOutFrame.Features.HistogramBlue.SetNumUninitialized(HistSize);
-            InOutFrame.Features.HistogramGreen.SetNumUninitialized(HistSize);
-            InOutFrame.Features.HistogramRed.SetNumUninitialized(HistSize);
-
-            for (int j = 0; j < HistSize; ++j)
-            {
-                InOutFrame.Features.HistogramBlue[j] = B_hist.at<float>(j);
-                InOutFrame.Features.HistogramGreen[j] = G_hist.at<float>(j);
-                InOutFrame.Features.HistogramRed[j] = R_hist.at<float>(j);
-            }
-            
-            if (bDebugDrawFeatures)
-            {
-                for (const auto& RotatedRect : AllDetectedShapesForDrawing)
-                {
-                    cv::Point2f Points[4];
-                    RotatedRect.points(Points);
-                    std::vector<std::vector<cv::Point>> Polygon(1);
-                    for (int i = 0; i < 4; ++i)
-                    {
-                        Polygon[0].push_back(Points[i]);
-                    }
-
-                    cv::Scalar Color = cv::Scalar(0, 255, 0, 255); 
-                    
-                    cv::polylines(InputMat, Polygon, true, Color, 5); 
-                }
-                for (const cv::Point2f& Corner : OpenCVInterestPoints) { 
-                    cv::circle(InputMat, Corner, 5, cv::Scalar(0, 0, 255, 255), -1);
-                }
-            }
-        }
-        else 
-        {
-            UE_LOG(LogIVR, Error, TEXT("ProcessFrameAndFeaturesAsync: RawDataBuffer é inválido ou vazio. Não é possível processar features."));
-        }
-        #else 
-        UE_LOG(LogIVR, Warning, TEXT("OpenCV está desabilitado. A extração de características visuais foi ignorada."));
-        #endif
-        AsyncTask(ENamedThreads::GameThread, [InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures, this]() mutable
+        AsyncTask(ENamedThreads::GameThread, [TempExtractedFeatures,InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures, this]() mutable
         {
             if (RealTimeOutputTexture2D && InOutFrame.RawDataBuffer.Num() > 0)
             {
@@ -1008,7 +886,6 @@ void UIVRCaptureComponent::ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFr
             {
                 UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: RealTimeOutputTexture2D ou RawDataBuffer inválido para saída RT APÓS processamento de features."));
             }
-
             if (OnRealTimeFrameReady.IsBound())
             {
                 OnRealTimeFrameReady.Broadcast(InOutFrame);
@@ -1031,8 +908,7 @@ void UIVRCaptureComponent::DeprojectPixelToWorld(
     float NDC_Y = (1.0f - (PixelPos.Y / ImageResolution.Y)) * 2.0f - 1.0f;
     float ViewX = NDC_X * FMath::Tan(FOVRad * 0.5f) * AspectRatio;
     float ViewY = NDC_Y * FMath::Tan(FOVRad * 0.5f);
-    FVector ViewSpaceDirection = FVector(ViewX, ViewY, -1.0f).GetSafeNormal(); 
-
+    FVector ViewSpaceDirection = FVector(ViewX, ViewY, -1.0f).GetSafeNormal();
     OutWorldDirection = CameraTransform.GetRotation().RotateVector(ViewSpaceDirection);
     OutWorldLocation = CameraTransform.GetLocation();
 }

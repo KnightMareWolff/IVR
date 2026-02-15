@@ -1,18 +1,19 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Recording/IVRFrameSource.h"
-#include "ImageUtils.h" // Necess�rio para FImageUtils
-#include "IImageWrapper.h" // Necess�rio para IImageWrapper
-#include "IImageWrapperModule.h" // Necess�rio para IImageWrapperModule
+// #include "ImageUtils.h" // Não é mais necessário diretamente aqui
+// #include "IImageWrapper.h" // Não é mais necessário diretamente aqui
+// #include "IImageWrapperModule.h" // Não é mais necessário diretamente aqui
 #include "TimerManager.h" // For FTimerHandle and FTimerManager
-#include "IVRFolderFrameSource.generated.h"
 
+// NOVO: Incluído para chamar a função LoadAndResizeImage do IVROpenCVBridge
+#include "IVROpenCVGlobals.h"
+
+#include "IVRFolderFrameSource.generated.h"
 UCLASS(Blueprintable, BlueprintType, meta=(DisplayName="IVR Folder Frame Source"))
 class IVR_API UIVRFolderFrameSource : public UIVRFrameSource
 {
@@ -32,11 +33,11 @@ protected:
     int32 CurrentImageIndex;
 
     void ReadNextFrameFromFile();
+    // A implementação de LoadImageFromFile agora chama IVROpenCVBridge::LoadAndResizeImage
     bool LoadImageFromFile(const FString& FilePath, TArray<uint8>& OutRawData);
 
 private:
-
-    TSharedPtr<IImageWrapper> GetImageWrapperByExtention(FString InImagePath);
+    // GetImageWrapperByExtention foi movido para IVROpenCVBridgeBridge.cpp
+    // TSharedPtr<IImageWrapper> GetImageWrapperByExtention(FString InImagePath);
 
 };
-

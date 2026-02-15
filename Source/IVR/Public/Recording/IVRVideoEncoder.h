@@ -1,27 +1,29 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #pragma once
-
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Core/IVRTypes.h"
+#include "IVRTypes.h"
+// [MANUAL_REF_POINT] FIVR_PipeWrapper é agora de IVROpenCVBridge
 #include "IVR_PipeWrapper.h"     // Para FIVR_PipeWrapper (Assumindo que está em um local acessível)
-#include "IVRECFactory.h" // Para UIVRECFactory (Assumindo que está em um local acessível)
+#include "IVR/Public/Recording/IVRECFactory.h" // Para UIVRECFactory (Assumindo que está em um local acessível)
 #include "HAL/Runnable.h"       // Para FRunnable (worker thread)
 #include "Containers/Queue.h"   // Para TQueue (thread-safe queue)
+// [MANUAL_REF_POINT] FFMpegLogReader é agora de IVROpenCVBridge
 #include "FFmpegLogReader.h"
 #include "HAL/ThreadSafeBool.h" // Incluir ThreadSafeBool
-#include "Core/IVRFramePool.h" // Adicionar este include!
+#include "IVRFramePool.h" // Adicionar este include!
+// [MANUAL_REF_POINT] FVideoEncoderWorker agora é de IVROpenCVBridge
+#include "FVideoEncoderWorker.h"
+
 #include "IVRVideoEncoder.generated.h"
 
 // Definição do LogCategory para esta classe
 DECLARE_LOG_CATEGORY_EXTERN(LogIVRVideoEncoder, Log, All);
 
-// Forward declaration da classe worker thread
-class FVideoEncoderWorker;
+// Forward declaration da classe worker thread (removido, agora incluido diretamente)
+// class FVideoEncoderWorker; // Não é mais necessário, pois o cabeçalho é incluído
 
 UCLASS(Blueprintable, BlueprintType, meta=(DisplayName="IVR Video Encoder"))
 class IVR_API UIVRVideoEncoder : public UObject
@@ -39,8 +41,7 @@ public:
     // Caminho completo para o executável do FFmpeg
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Encoder Settings")
     FString FFmpegExecutablePath; // Agora gerado automaticamente, mas pode ser sobrescrito pelo BP
-
-     /**
+    /**
      * @brief Inicializa o codificador de vídeo, configura o pipe de entrada e o worker thread.
      * @param Settings Configurações de vídeo para a codificação.
      * @param InFFmpegExecutablePath Caminho para o executável FFmpeg.
@@ -50,8 +51,7 @@ public:
      * @return true se a inicialização foi bem-sucedida, false caso contrário.
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Encoder")
-    bool Initialize(const FIVR_VideoSettings& Settings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool); 
-
+    bool Initialize(const FIVR_VideoSettings& Settings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool);
     /**
      * @brief Lança o processo principal do FFmpeg para iniciar a gravação ao vivo.
      * @param LiveOutputFilePath Caminho completo para o arquivo de vídeo de saída ao vivo.
@@ -72,7 +72,6 @@ public:
     * @return true se o frame foi adicionado com sucesso, false caso contrário.
     */
     bool EncodeFrame(FIVR_VideoFrame Frame); // Assinatura mudada para receber por valor
-
     /**
      * @brief Sinaliza que não haverá mais frames para codificar e aguarda a conclusão da escrita no pipe.
      * Isso fecha o pipe de entrada e sinaliza EOF ao FFmpeg.
@@ -92,7 +91,6 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "IVR")
     bool IsInitialized() const { return bIsInitialized; }
-
 protected:
     // Configurações de vídeo atuais
     FIVR_VideoSettings CurrentSettings;
@@ -109,7 +107,6 @@ protected:
     void* FFmpegWritePipeStdout;      // Handle de escrita para o pipe do FFmpeg stdout
     void* FFmpegReadPipeStderr;       // Handle de leitura para o pipe do FFmpeg stderr
     void* FFmpegWritePipeStderr;      // Handle de escrita para o pipe do FFmpeg stderr
-
     // Wrapper para o Named Pipe de entrada de vídeo (UE -> FFmpeg)
     FIVR_PipeWrapper VideoInputPipe;
     
@@ -134,8 +131,7 @@ protected:
     
     // Evento para sinalizar que novos frames estão disponíveis ou que a thread deve verificar o estado (shutdown/finish)
     FEvent* NewFrameEvent;
-
-     // Largura e altura reais dos frames a serem processados
+    // Largura e altura reais dos frames a serem processados
     int32 ActualProcessingWidth;
     int32 ActualProcessingHeight;
 
@@ -153,30 +149,3 @@ protected:
      */
     FString GetFFmpegExecutablePathInternal() const;
 };
-
-/**
- * FVideoEncoderWorker
- * Implementa FRunnable para processar a fila de frames e escrevê-los no Named Pipe em um thread separado.
- */
-class FVideoEncoderWorker : public FRunnable
-{
-public:
-    FVideoEncoderWorker(UIVRVideoEncoder* InEncoder, TQueue<FIVR_VideoFrame, EQueueMode::Mpsc>& InFrameQueue, FIVR_PipeWrapper& InVideoInputPipe, FThreadSafeBool& InStopFlag, FThreadSafeBool& InNoMoreFramesFlag, FEvent* InNewFrameEvent, UIVRFramePool* InFramePool);
-    virtual ~FVideoEncoderWorker();
-
-    // Implementação da interface FRunnable
-    virtual bool Init() override;
-    virtual uint32 Run() override;
-    virtual void Stop() override;
-    virtual void Exit() override;
-
-private:
-    UIVRVideoEncoder* Encoder; // Ponteiro raw para o UObject pai (para acesso a logs e configurações)
-    TQueue<FIVR_VideoFrame, EQueueMode::Mpsc>& FrameQueue; // Referência à fila de frames
-    FIVR_PipeWrapper& VideoInputPipe; // Referência ao wrapper do pipe de vídeo
-    FThreadSafeBool& bShouldStop; // Referência para a flag de parada da thread
-    FThreadSafeBool& bNoMoreFramesToEncode; // Referência para a flag de "sem mais frames"
-    FEvent* NewFrameEvent; // Referência ao evento de sinalização
-    UIVRFramePool* FramePool; // Referência ao pool de frames para liberar buffers 
-};
-

@@ -7,7 +7,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Core/IVRTypes.h"
+#include "IVRTypes.h"
 #include "IVRECFactory.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogIVRECFactory, Log, All);

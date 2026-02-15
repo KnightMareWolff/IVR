@@ -13,7 +13,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h" 
 #include "IVR.h" 
-#include "Core/IVRFramePool.h" 
+#include "IVRFramePool.h" 
 
 // Inicializa��o do Singleton Instance
 UIVRRecordingManager* UIVRRecordingManager::Instance = nullptr;

@@ -7,7 +7,7 @@
 #include "Components/Image.h"       // Necessário para UImage* (se usar Binding por C++)
 #include "Engine/Texture2D.h"       // Necessário para UTexture2D*
 #include "Components/IVRCaptureComponent.h" // Inclua o cabeçalho do seu componente de captura
-#include "Core/IVRTypes.h"          // Necessário para FIVR_JustRTFrame
+#include "IVRTypes.h"          // Necessário para FIVR_JustRTFrame
 
 #include "IVRDisplayWidget.generated.h"
 

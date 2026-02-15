@@ -12,7 +12,7 @@
 
 // NOVO: Enum para definir o tipo de fonte de frames
 UENUM(BlueprintType)
-enum class EIVRFrameSourceType : uint8
+enum class EIVRFrameSourceType : uint8 
 {
     Simulated       UMETA(DisplayName = "Simulated Frames"),
     RenderTarget    UMETA(DisplayName = "Render Target Capture"),
@@ -22,7 +22,7 @@ enum class EIVRFrameSourceType : uint8
 };
 
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_VideoSettings
+struct IVRCORE_API FIVR_VideoSettings
 {
     GENERATED_BODY()
 
@@ -138,7 +138,7 @@ struct IVR_API FIVR_VideoSettings
 // ... (Restante do arquivo IVRTypes.h permanece inalterado) ...
 // NOVO: Estrutura para um �nico ponto de interesse com informa��es detalhadas
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_JustRTPoint
+struct IVRCORE_API FIVR_JustRTPoint
 {
     GENERATED_BODY()
 
@@ -163,7 +163,7 @@ struct IVR_API FIVR_JustRTPoint
 
 // NOVO: Estrutura para encapsular todas as caracter�sticas extra�das
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_JustRTFeatures
+struct IVRCORE_API FIVR_JustRTFeatures
 {
     GENERATED_BODY()
 
@@ -195,7 +195,7 @@ struct IVR_API FIVR_JustRTFeatures
 
 // Estrutura para os dados de sada de frames em tempo real
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_JustRTFrame
+struct IVRCORE_API FIVR_JustRTFrame
 {
     GENERATED_BODY()
 
@@ -233,7 +233,7 @@ struct IVR_API FIVR_JustRTFrame
 
 
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_TakeInfo
+struct IVRCORE_API FIVR_TakeInfo
 {
     GENERATED_BODY()
 
@@ -251,7 +251,7 @@ struct IVR_API FIVR_TakeInfo
 };
 
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_VideoFrame
+struct IVRCORE_API FIVR_VideoFrame
 {
     GENERATED_BODY()
 
@@ -283,7 +283,7 @@ struct IVR_API FIVR_VideoFrame
  * Esta estrutura pode ser usada para configurar Named Pipes criados ou acessados pelo plugin IVR.
  */
 USTRUCT(BlueprintType)
-struct IVR_API FIVR_PipeSettings
+struct IVRCORE_API FIVR_PipeSettings
 {
     GENERATED_BODY()
 

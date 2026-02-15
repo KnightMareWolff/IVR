@@ -11,13 +11,15 @@ public class IVR : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        // C1: Ativar RTTI para o módulo IVR para compatibilidade com certas partes do OpenCV no Linux.
-        bUseRTTI = true;
+        // Para este módulo de UObjects, desabilitamos RTTI e Exceções em todas as plataformas
+        // para garantir total compatibilidade com a arquitetura da Unreal Engine para UObjects.
+        bUseRTTI = false;
+        bEnableExceptions = false;
+        bDisableAutoRTFMInstrumentation = false;
 
         PublicIncludePaths.AddRange(
             new string[] {
                 Path.Combine(ModuleDirectory, "Public"),
-                Path.Combine(ModuleDirectory, "Public", "Core"),
                 Path.Combine(ModuleDirectory, "Public", "Components"),
                 Path.Combine(ModuleDirectory, "Public", "Recording"),
                 Path.Combine(ModuleDirectory, "Public", "UI")
@@ -27,14 +29,10 @@ public class IVR : ModuleRules
         PrivateIncludePaths.AddRange(
             new string[] {
                 Path.Combine(ModuleDirectory, "Private"),
-                Path.Combine(ModuleDirectory, "Private", "Core"),
                 Path.Combine(ModuleDirectory, "Private", "Components"),
                 Path.Combine(ModuleDirectory, "Private", "Recording"),
-                Path.Combine(ModuleDirectory, "Private", "UI"),
-                // **CORREÇÃO**: Adição explícita do caminho público do OpenCVHelper
-                // Isso ajuda o compilador a encontrar 'OpenCVHelper.h', 'PreOpenCVHeaders.h', 'PostOpenCVHeaders.h'
-                // quando o plugin OpenCV está habilitado.
-                Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "OpenCVHelper", "Public")
+                Path.Combine(ModuleDirectory, "Private", "UI")
+                // O caminho público do OpenCVHelper foi movido para IVROpenCVBridge
             }
         );
 
@@ -55,32 +53,22 @@ public class IVR : ModuleRules
                 "CinematicCamera", // Se usa componentes de câmera cinematográfica
                 "ImageWrapper",  // Para carregar/salvar imagens (UIVRFolderFrameSource)
                 "MediaAssets",   // Se o plugin interage com assets de mídia da UE
-                "MediaUtils"
+                "MediaUtils",
+                "IVROpenCVBridge", // Mantenha esta, IVR ainda usa IVROpenCVBridge
+                "IVRCore"          // <--- NOVO: Adicione esta dependência
+                
             }
         );
 
-        //OpenCV Definitions
-        if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Mac) || (Target.Platform == UnrealTargetPlatform.Linux))
-        {
-            // **CORREÇÃO**: Adição explícita do caminho público do OpenCVHelper
-            // Isso ajuda o compilador a encontrar 'OpenCVHelper.h', 'PreOpenCVHeaders.h', 'PostOpenCVHeaders.h'
-            // quando o plugin OpenCV está habilitado.
-            PrivateIncludePaths.AddRange(
-            new string[] {
-                Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "OpenCVHelper", "Public")
-            });
-
-            //OpenCV Only for the Target Platforms.
-            //To make possible it works on Android a really big platform change will be needed on the Code Infrastructure, mainly on the Pipes!
-            PublicDependencyModuleNames.Add("OpenCV");
-            PublicDependencyModuleNames.Add("OpenCVHelper");
-        }
+        // As dependências e includes específicos do OpenCV foram movidos para IVROpenCVBridge.Build.cs
 
         // Condicional para módulos RHI específicos de plataforma
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
             PrivateDependencyModuleNames.Add("D3D12RHI");
             PrivateDependencyModuleNames.Add("HeadMountedDisplay");
+            PrivateDependencyModuleNames.Add("IVROpenCVBridge");
+            PrivateDependencyModuleNames.Add("IVRCore");
             // Se você tiver código que se beneficia diretamente do D3D12, adicione aqui.
             // Ex: PrivateDependencyModuleNames.Add("D3D12Core");
         }
@@ -100,13 +88,9 @@ public class IVR : ModuleRules
             // PrivateDependencyModuleNames.Add("MetalRHI");
         }
 
-        // **CORREÇÃO**: Desativa Unity Builds para plugins complexos com compilação condicional.
+        // Desativa Unity Builds para plugins complexos com compilação condicional.
         // Isso ajuda a evitar problemas de 'macro redefined' e com bibliotecas de terceiros.
         bUseUnity = false;
-
-        // **NÃO DEFINIR WITH_OPENCV AQUI**. O próprio plugin nativo "OpenCV" da Unreal Engine
-        // (que agora é uma dependência) já gerencia a definição desta macro globalmente
-        // com base em sua própria habilitação/desabilitação.
 
         // Configurações específicas da plataforma:
         // Para funções da Windows API como CreateNamedPipe.

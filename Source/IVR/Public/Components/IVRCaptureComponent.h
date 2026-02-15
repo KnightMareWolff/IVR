@@ -1,25 +1,21 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of Williäm Wolff and protected by copywright law.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
-#include "Core/IVRTypes.h"
-
-#include "Core/IVRFramePool.h"
-#include "Recording/IVRFrameSource.h"
 #include "Recording/IVRSimulatedFrameSource.h"
 #include "Recording/IVRRenderFrameSource.h"
 #include "Recording/IVRFolderFrameSource.h"
 #include "Recording/IVRVideoFrameSource.h"
 #include "Recording/IVRWebcamFrameSource.h"
-
 #include "Engine/Texture2D.h" 
 #include "Engine/TextureRenderTarget2D.h" 
 #include "CineCameraComponent.h" // Se ainda estiver usando
+
+#include "IVRTypes.h"
+#include "IVRFramePool.h"
 
 #include "IVRCaptureComponent.generated.h"
 
@@ -46,7 +42,6 @@ public:
     // Recording Control
     UFUNCTION(BlueprintCallable, Category = "IVR")
     void StartRecording();
-
     UFUNCTION(BlueprintCallable, Category = "IVR")
     void StopRecording();
 
@@ -68,7 +63,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Takes")
     bool bAutoStartNewTake = true;
-
     /**
      * @brief Prepara um arquivo de vídeo para gravação, transcodificando-o para um formato compatível
      *        com o OpenCV, se necessário. O processo pode levar tempo e bloquear a thread.
@@ -83,8 +77,6 @@ public:
                       ToolTip = "Transcodes a video file to a compatible format for OpenCV capture. Can be slow.",
                       DeterminesOutputType = "OutPreparedVideoPath"))
     FString PrepareVideoForRecording(const FString& InSourceVideoPath, const FString& OutPreparedVideoPath, bool bOverwrite = true);
-
-
     /**
      * @brief Transcodifica um vídeo existente para um formato mais amplamente compatível.
      *        Útil para gerar uma versão para distribuição ao usuário final a partir de um master otimizado.
@@ -101,7 +93,6 @@ public:
                       ToolTip = "Transcodes an existing video to a more widely compatible format for end-user distribution.",
                       DeterminesOutputType = "OutCompatibleVideoPath"))
     FString ExportVideoToCompatibleFormat(const FString& InSourceVideoPath, const FString& OutCompatibleVideoPath, bool bOverwrite, const FIVR_VideoSettings& EncodingSettings);
-
     // Delegates para notificação de estados da gravação (Proposta 02)
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStarted OnRecordingStarted;
@@ -118,7 +109,6 @@ public:
     // Delegate para notificar que um frame em tempo real está pronto para coleta
     UPROPERTY(BlueprintAssignable, Category = "IVR|JustRTCapture Events")
     FOnRealTimeFrameReady OnRealTimeFrameReady;
-
     // Cor de tintura para o modo de captura em tempo real (JustRTCapture)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video|JustRTCapture",
         meta = (EditCondition = "bEnableRTFrames", EditConditionHides, DisplayName = "Real-Time Display Tint"))
@@ -145,7 +135,6 @@ private:
     int32 ActualFrameWidth = 0;
     UPROPERTY(Transient)
     int32 ActualFrameHeight = 0;
-
     void StartNewTake();
     void EndCurrentTake();
 
@@ -166,7 +155,6 @@ private:
     UTexture2D* RealTimeOutputTexture2D; 
 
     void UpdateTextureFromRawData(UTexture2D* Texture, const TArray<uint8>& RawData, int32 InWidth, int32 InHeight);
-
     /**
      * @brief Processa a FIVR_JustRTFrame em uma thread de segundo plano para extrair features e deprojetá-las para 3D.
      * O resultado é adicionado de volta à FIVR_JustRTFrame antes de ser transmitido via delegate.

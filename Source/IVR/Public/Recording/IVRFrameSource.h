@@ -7,8 +7,8 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Core/IVRTypes.h"
-#include "Core/IVRFramePool.h" // Inclua o pool de frames
+#include "IVRTypes.h"
+#include "IVRFramePool.h" // Inclua o pool de frames
 
 #include "IVRFrameSource.generated.h"
 

@@ -18,7 +18,17 @@
 			"Name": "IVR",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
-		}
+		},
+                {
+                        "Name": "IVRCore",
+                        "Type": "Runtime",
+                        "LoadingPhase": "Default"
+                },
+                {
+                        "Name": "IVROpenCVBridge", 
+                        "Type": "Runtime",
+                        "LoadingPhase": "Default"
+                }
 	],
 	"Plugins": [
 		{

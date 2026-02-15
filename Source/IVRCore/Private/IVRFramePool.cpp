@@ -3,8 +3,7 @@
 // This code is property of WilliÃ¤m Wolff and protected by copywright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
-#include "Core/IVRFramePool.h"
-#include "IVR.h" // Inclua a LogCategory (se n�o estiver em CoreMinimal)
+#include "IVRFramePool.h"
 
 DEFINE_LOG_CATEGORY(LogIVRFramePool);
 

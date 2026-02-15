@@ -7,7 +7,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Core/IVRTypes.h" 
+#include "IVRTypes.h" 
 
 #include "IVRRecordingManager.generated.h"
 

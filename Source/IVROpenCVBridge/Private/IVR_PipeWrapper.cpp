@@ -1,16 +1,15 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of Williäm Wolff and protected by copywright law.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #include "IVR_PipeWrapper.h"
-#include "IVRGlobalStatics.h" // Para o tratamento de erros
+//#include "IVRGlobalStatics.h" // Para o tratamento de erros (este é do módulo IVR, mas está ok chamar)
 #include "Misc/Guid.h" // Para gerar GUIDs
 #include "Misc/FileHelper.h" // Para FFileHelper::DeleteFile
 #include "HAL/PlatformMisc.h" // Para FPlatformMisc::GetLastError
 #include "Misc/Paths.h" // Para FPaths::GetTempDir
 
-// Definição de LogCategory
+// Definição de LogCategory (agora do módulo IVR, se for usado o LogIVR.
+// Se quiser um log separado, defina LogIVRPipeWrapper no IVROpenCVBridge.h/.cpp)
 DEFINE_LOG_CATEGORY(LogIVRPipeWrapper);
 
 // Constructor
@@ -61,7 +60,6 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     {
         PipeMode |= PIPE_NOWAIT; // Modo não-bloqueante
     }
-
     DWORD CalculatedBufferSize = Settings.OutBufferSize; // Valor padrão da PipeSettings
     if (InWidth > 0 && InHeight > 0)
     {
@@ -71,7 +69,6 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
         // Um valor muito grande pode ser internamente truncado.
         // 8MB (para 1080p BGRA) é geralmente OK, mas é bom ter em mente.
     }
-
     // Cria a instância do Named Pipe
     PipeHandle = CreateNamedPipe(
         *FullPipePath,            // Nome do pipe
@@ -83,22 +80,18 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
         NMPWAIT_USE_DEFAULT_WAIT, // Timeout padrão para cliente conectar
         NULL);                    // Atributos de segurança (padrão)
 
-    FIVR_SystemErrorDetails Det = UIVRGlobalStatics::GetLastSystemErrorDetails();
-    if (Det.ErrorCode != 0)
+    // FIVR_SystemErrorDetails Det = UIVRGlobalStatics::GetLastSystemErrorDetails(); // UIVRGlobalStatics é UObject, não pode ser incluído aqui.
+    // Apenas loga o erro bruto.
+    if (PipeHandle == INVALID_HANDLE_VALUE) // Corrigido para verificar INVALID_HANDLE_VALUE, não um ponteiro nulo.
     {
-        UE_LOG(LogIVR, Error, TEXT("Failed CreateNamedPipe %s. Error: %d Description: %s"), *FullPipePath, Det.ErrorCode,*Det.ErrorDescription);
-        return false;
-    }
-
-    if (!PipeHandle)
-    {
-        UE_LOG(LogIVR, Error, TEXT("Failed to create Windows Named Pipe '%s'. Error: Null Pointer"), *FullPipePath);
+        DWORD ErrorCode = GetLastError();
+        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to create Windows Named Pipe '%s'. Error: %d"), *FullPipePath, ErrorCode);
         return false;
     }
 
     // Apenas defina bIsCreatedAndConnected como true, pois o pipe foi criado com sucesso.
     bIsCreatedAndConnected = true;
-    UE_LOG(LogIVR, Log, TEXT("Windows Named Pipe '%s' created successfully and awaiting client connection."), *FullPipePath);
+    UE_LOG(LogIVRPipeWrapper, Log, TEXT("Windows Named Pipe '%s' created successfully and awaiting client connection."), *FullPipePath);
 
 
 #elif PLATFORM_LINUX || PLATFORM_MAC
@@ -106,20 +99,19 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     // FPaths::ProjectSavedDir() é um local garantido e adequado para arquivos temporários do plugin.
     // Criamos um subdiretório para organizar os pipes temporários.
     FullPipePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("IVRTemporaryPipes"), UniquePipeName);
-
     // Tenta deletar o FIFO se ele já existir, para garantir um novo começo limpo.
     // mkfifo falharia se o arquivo já existisse.
     if (access(TCHAR_TO_UTF8(*FullPipePath), F_OK) == 0)
     {
         unlink(TCHAR_TO_UTF8(*FullPipePath));
-        UE_LOG(LogIVR, Warning, TEXT("Removed existing FIFO file '%s'."), *FullPipePath);
+        UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Removed existing FIFO file '%s'."), *FullPipePath);
     }
 
     // Criar o FIFO (mkfifo)
     // Permissões 0666 para read/write para owner, group, others.
     if (mkfifo(TCHAR_TO_UTF8(*FullPipePath), 0666) == -1)
     {
-        UE_LOG(LogIVR, Error, TEXT("Failed to create FIFO '%s'. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
+        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to create FIFO '%s'. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
         return false;
     }
     
@@ -130,22 +122,21 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     {
         OpenFlags |= O_NONBLOCK;
     }
-
     // Abrir o FIFO. Isso pode bloquear se bBlockingMode for true e não houver leitor ainda.
-    UE_LOG(LogIVR, Log, TEXT("Opening FIFO '%s' for writing... (will block if no reader)"), *FullPipePath);
+    UE_LOG(LogIVRPipeWrapper, Log, TEXT("Opening FIFO '%s' for writing... (will block if no reader)"), *FullPipePath);
     FileDescriptor = open(TCHAR_TO_UTF8(*FullPipePath), OpenFlags);
 
     if (FileDescriptor == -1)
     {
-        UE_LOG(LogIVR, Error, TEXT("Failed to open FIFO '%s' for writing. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
+        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to open FIFO '%s' for writing. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
         unlink(TCHAR_TO_UTF8(*FullPipePath)); // Limpa o FIFO que foi criado
         return false;
     }
     bIsCreatedAndConnected = true;
-    UE_LOG(LogIVR, Log, TEXT("FIFO '%s' opened successfully for writing."), *FullPipePath);
+    UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' opened successfully for writing."), *FullPipePath);
 
 #else // Outras plataformas (se houver)
-    UE_LOG(LogIVR, Error, TEXT("FIVR_PipeWrapper::Create not implemented for this platform."));
+    UE_LOG(LogIVRPipeWrapper, Error, TEXT("FIVR_PipeWrapper::Create not implemented for this platform."));
     return false;
 #endif
 
@@ -177,7 +168,6 @@ bool FIVR_PipeWrapper::Connect()
         PipeHandle = INVALID_HANDLE_VALUE;
         return false;
     }
-
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("Named Pipe '%s' connected successfully."), *FullPipePath);
     return true;
 #else
@@ -192,7 +182,7 @@ int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
 {
     if (!IsValid())
     {
-        UE_LOG(LogIVR, Error, TEXT("Attempted to write to an invalid or uninitialized pipe."));
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("Attempted to write to an invalid or uninitialized pipe."));
         return -1;
     }
 
@@ -200,10 +190,9 @@ int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
     DWORD BytesWritten;
     if (!WriteFile(PipeHandle, Data, NumBytes, &BytesWritten, nullptr))
     {
-        UE_LOG(LogIVR, Error, TEXT("Failed to write to Windows Named Pipe. Error: %d"), GetLastError());
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("Failed to write to Windows Named Pipe. Error: %d"), GetLastError());
         return -1;
     }
-
     if (BytesWritten != (DWORD)NumBytes)
     {
         UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Incomplete write to Named Pipe '%s'. Wrote %d bytes."), *FullPipePath, BytesWritten);
@@ -234,7 +223,6 @@ void FIVR_PipeWrapper::Close()
     {
         return; // Já fechado ou nunca foi válido
     }
-
 #if PLATFORM_WINDOWS
     if (PipeHandle != INVALID_HANDLE_VALUE)
     {
@@ -242,7 +230,7 @@ void FIVR_PipeWrapper::Close()
         DisconnectNamedPipe(PipeHandle); // Desconecta o cliente
         CloseHandle(PipeHandle);         // Fecha o handle
         PipeHandle = INVALID_HANDLE_VALUE;
-        UE_LOG(LogIVR, Log, TEXT("Windows Named Pipe '%s' closed."), *FullPipePath);
+        UE_LOG(LogIVROpenCVBridge, Log, TEXT("Windows Named Pipe '%s' closed."), *FullPipePath);
     }
 #elif PLATFORM_LINUX || PLATFORM_MAC
     if (FileDescriptor != -1)
@@ -263,7 +251,6 @@ void FIVR_PipeWrapper::Close()
     bIsCreatedAndConnected = false;
     FullPipePath = TEXT(""); // Limpa o caminho
 }
-
 bool FIVR_PipeWrapper::IsValid() const
 {
 #if PLATFORM_WINDOWS

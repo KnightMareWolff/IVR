@@ -1,8 +1,6 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
 // This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #include "Recording/IVRRecordingSession.h"
 #include "IVR.h"
 #include "Misc/DateTime.h"
@@ -15,6 +13,13 @@
 #include "HAL/FileManager.h"
 #include "Async/Async.h" 
 
+// [MANUAL_REF_POINT] Includes para classes nativas agora no IVROpenCVBridge
+#include "../IVRGlobalStatics.h"
+#include "IVROpenCVBridge/Public/IVR_PipeWrapper.h" 
+
+#include "IVRVideoEncoder.h" // Inclui o novo encoder centralizado
+#include "IVRFramePool.h" // Adicionar este include!
+
 // Implementação do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRRecSession);
 
@@ -25,7 +30,6 @@ UIVRRecordingSession::UIVRRecordingSession()
     , FramePool(nullptr) // Inicializa o FramePool
 {
 }
-
 UIVRRecordingSession::~UIVRRecordingSession()
 {
     // Garante que a gravação seja interrompida e os recursos liberados.
@@ -51,7 +55,6 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
         UE_LOG(LogIVRRecSession, Error, TEXT("UIVRRecordingSession::Initialize: FramePool is null. Cannot initialize."));
         return;
     }
-
     // Garante que o VideoEncoder seja inicializado uma única vez para esta sessão/take.
     if (!VideoEncoder)
     {
@@ -62,7 +65,7 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
             return;
         }
         // Inicializa o VideoEncoder com as configurações, o caminho do FFmpeg e a resolução real e o FramePool.
-        if (!VideoEncoder->Initialize(UserRecordingSettings, InFFmpegExecutablePath, InActualFrameWidth, InActualFrameHeight, FramePool)) 
+        if (!VideoEncoder->Initialize(UserRecordingSettings, InFFmpegExecutablePath, InActualFrameWidth, InActualFrameHeight, InFramePool)) 
         {
             UE_LOG(LogIVRRecSession, Error, TEXT("Failed to initialize UIVRVideoEncoder."));
             VideoEncoder = nullptr; 
@@ -82,7 +85,6 @@ bool UIVRRecordingSession::StartRecording()
         UE_LOG(LogIVRRecSession, Warning, TEXT("Recording is already in progress. Call StopRecording() first."));
         return false;
     }
-
     if (!VideoEncoder || !VideoEncoder->IsInitialized())
     {
         UE_LOG(LogIVRRecSession, Error, TEXT("VideoEncoder is not initialized. Cannot start recording."));
@@ -111,7 +113,6 @@ bool UIVRRecordingSession::StartRecording()
         }
         return false;
     }
-
     // Inicia o thread de gravação local (que apenas enfileira frames no VideoEncoder)
     RecordingThread = FRunnableThread::Create(this, TEXT("IVRecThread"), 0, TPri_Normal);
     if (!RecordingThread)
@@ -132,7 +133,6 @@ void UIVRRecordingSession::StopRecording()
 {
     // Validação robusta para evitar warnings falsos ou tentar parar algo que já está parado.
     bool bNeedsStopping = bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized());
-
     if (!bNeedsStopping)
     {
         UE_LOG(LogIVRRecSession, Warning, TEXT("Attempted to stop recording, but session is not active or already stopped. No actions taken."));
@@ -155,7 +155,6 @@ void UIVRRecordingSession::StopRecording()
     {
         VideoEncoder->FinishEncoding();
     }
-
     // Espera o thread de gravação local terminar
     if (RecordingThread)
     {
@@ -178,7 +177,6 @@ void UIVRRecordingSession::StopRecording()
     // A validação se o arquivo foi realmente criado será feita pelo UIVRRecordingManager.
     // NENHUMA LÓGICA DE CONCATENAÇÃO AQUI.
 }
-
 void UIVRRecordingSession::PauseRecording()
 {
     if (bIsRecording && !bIsPaused)
@@ -213,7 +211,6 @@ void UIVRRecordingSession::ClearQueues()
     VideoConsumerQCounter = 0;
     VideoProducerQCounter = 0;
 }
-
 // Adiciona um frame de vídeo à fila. Timestamp já é o tempo global.
 void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mudada
 {
@@ -238,10 +235,9 @@ void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mu
         }
         return; 
     }
-
-    // LOG DE DEBUG: Confirma o tamanho do frame que está sendo enfileirado
-    UE_LOG(LogIVRRecSession, Warning, TEXT("UIVRRecordingSession: Enqueuing frame. RawDataPtr size: %d"), 
-        Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0);
+// LOG DE DEBUG: Confirma o tamanho do frame que está sendo enfileirado
+    // UE_LOG(LogIVRRecSession, Warning, TEXT("UIVRRecordingSession: Enqueuing frame. RawDataPtr size: %d"), 
+    //    Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0); // Descomente para debug intenso
 // Enfileira o frame para a worker thread processar. Usa MoveTemp para mover o TSharedPtr eficientemente.
     VideoFrameProducerQueue.Enqueue(MoveTemp(Frame)); 
     VideoProducerQCounter++;
@@ -257,8 +253,7 @@ FString UIVRRecordingSession::GenerateTakeFilePath()
     FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
     FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-
-    // C4: Garante que o diretório "Recordings" exista.
+// C4: Garante que o diretório "Recordings" exista.
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
@@ -275,8 +270,7 @@ FString UIVRRecordingSession::GenerateMasterFilePath() const
     FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
     FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-
-    // C4: Garante que o diretório "Recordings" exista.
+// C4: Garante que o diretório "Recordings" exista.
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
@@ -293,7 +287,6 @@ bool UIVRRecordingSession::Init()
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Initialized."));
     return true;
 }
-
 uint32 UIVRRecordingSession::Run()
 {
     
@@ -351,7 +344,6 @@ uint32 UIVRRecordingSession::Run()
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Run loop finished."));
     return 0;
 }
-
 void UIVRRecordingSession::Stop()
 {
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Stop signal received."));

@@ -8,7 +8,7 @@
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "TimerManager.h" // Para FTimerHandle e FTimerManager
-#include "Core/IVRTypes.h" // Para FIVR_VideoFrame
+#include "IVRTypes.h" // Para FIVR_VideoFrame
 #include "Recording/IVRFrameSource.h" // NOVO: Deriva da classe base
 
 

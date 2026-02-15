@@ -1,8 +1,6 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
 // This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #include "Recording/IVRVideoEncoder.h"
 #include "IVR.h"
 #include "Misc/Guid.h"         // Para FGuid::NewGuid()
@@ -13,121 +11,21 @@
 #include "Internationalization/Text.h" // Para FText e FText::Format
 #include "Async/Async.h" // Para UE_LOG no thread
 #include "Misc/Paths.h" // Para FPaths
+
+// [MANUAL_REF_POINT] FFMpegLogReader e FIVR_PipeWrapper são agora de IVROpenCVBridge
+#include "IVROpenCVBridge/Public/FFmpegLogReader.h"
+#include "IVROpenCVBridge/Public/IVR_PipeWrapper.h"
+// [MANUAL_REF_POINT] FVideoEncoderWorker agora é de IVROpenCVBridge
+#include "IVROpenCVBridge/Public/FVideoEncoderWorker.h"
+
 // Definição do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRVideoEncoder);
 
 // =====================================================================================
-// FVideoEncoderWorker Implementation
-// =====================================================================================
-FVideoEncoderWorker::FVideoEncoderWorker(UIVRVideoEncoder* InEncoder, TQueue<FIVR_VideoFrame, EQueueMode::Mpsc>& InFrameQueue, FIVR_PipeWrapper& InVideoInputPipe, FThreadSafeBool& InStopFlag, FThreadSafeBool& InNoMoreFramesFlag, FEvent* InNewFrameEvent, UIVRFramePool* InFramePool)
-    : Encoder(InEncoder)
-    , FrameQueue(InFrameQueue)
-    , VideoInputPipe(InVideoInputPipe)
-    , bShouldStop(InStopFlag) 
-    , bNoMoreFramesToEncode(InNoMoreFramesFlag)
-    , NewFrameEvent(InNewFrameEvent)
-    , FramePool(InFramePool) 
-{
-}
-
-FVideoEncoderWorker::~FVideoEncoderWorker()
-{
-    // Limpeza aqui é mínima, a maioria dos recursos é gerenciada pelo UIVRVideoEncoder
-}
-bool FVideoEncoderWorker::Init()
-{
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video Encoder Worker thread initialized."));
-    return true;
-}
-
-uint32 FVideoEncoderWorker::Run()
-{
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video Encoder Worker thread started."));
-
-    // C3: Mover Conexão do Pipe para a Thread Worker - INÍCIO
-    // Este método bloqueia até que o FFmpeg se conecte ao pipe.
-    // Executá-lo aqui (na thread worker) evita o congelamento da Game Thread.
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("FVideoEncoderWorker: Awaiting FFmpeg connection to video input pipe..."));
-    if (!VideoInputPipe.Connect())
-    {
-        UE_LOG(LogIVRVideoEncoder, Error, TEXT("FVideoEncoderWorker: Failed to connect Video Named Pipe to FFmpeg. Signaling worker to stop."));
-        bShouldStop.AtomicSet(true); // Sinaliza para parar a worker thread
-        return 1; // Retorna com erro
-    }
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("FVideoEncoderWorker: Video input pipe successfully connected."));
-    // C3: Mover Conexão do Pipe para a Thread Worker - FIM
-
-    FIVR_VideoFrame CurrentFrame; // Vai receber o frame do tipo FIVR_VideoFrame (com TSharedPtr)
-    while (!bShouldStop) 
-    {
-        while (FrameQueue.Dequeue(CurrentFrame)) // Dequeue de FIVR_VideoFrame
-        {
-            if (bShouldStop) 
-            {
-                // Se o thread foi sinalizado para parar, libera o frame atual antes de sair.
-                if (FramePool && CurrentFrame.RawDataPtr.IsValid())
-                {
-                    FramePool->ReleaseFrame(CurrentFrame.RawDataPtr);
-                }
-                break; 
-            }
-            
-            //Acessa os dados do buffer via RawDataPtr
-            if (!CurrentFrame.RawDataPtr.IsValid() || CurrentFrame.RawDataPtr->Num() == 0)
-            {
-                UE_LOG(LogIVRVideoEncoder, Error, TEXT("Video Encoder Worker: Received invalid or empty frame buffer. Dropping frame."));
-                if (FramePool && CurrentFrame.RawDataPtr.IsValid())
-                {
-                    FramePool->ReleaseFrame(CurrentFrame.RawDataPtr);
-                }
-                continue; 
-            }
-            UE_LOG(LogIVRVideoEncoder, Warning, TEXT("Video Encoder Worker: Attempting to write %d bytes to pipe (Frame %dx%d)."), 
-                CurrentFrame.RawDataPtr->Num(), CurrentFrame.Width, CurrentFrame.Height);
-
-            // Escreve o frame no pipe
-            if (VideoInputPipe.Write(CurrentFrame.RawDataPtr->GetData(), CurrentFrame.RawDataPtr->Num()))
-            {
-                UE_LOG(LogIVRVideoEncoder, Warning, TEXT("Video Encoder Worker: Successfully wrote %d bytes to video pipe."),CurrentFrame.RawDataPtr->Num());
-            }
-            else
-            {
-                UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to write video frame to pipe. Pipe may be closed or in error state. Signalling worker stop."));
-                bShouldStop.AtomicSet(true); 
-            }
-            // SEMPRE RETORNA O FRAME PARA O POOL APÓS USÁ-LO
-            if (FramePool && CurrentFrame.RawDataPtr.IsValid())
-            {
-                FramePool->ReleaseFrame(CurrentFrame.RawDataPtr);
-            }
-        }
-        // Se a fila estiver vazia e não houver mais frames ou não for para parar, espera por um novo evento.
-        if (FrameQueue.IsEmpty() && !bShouldStop)
-        {
-            NewFrameEvent->Wait(100); // Espera por até 100ms por um novo frame ou sinal de parada
-        }
-    }
-
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video Encoder Worker thread stopped."));
-    return 0;
-}
-
-void FVideoEncoderWorker::Stop()
-{
-    bShouldStop.AtomicSet(true); 
-    if (NewFrameEvent) NewFrameEvent->Trigger();
-}
-
-void FVideoEncoderWorker::Exit()
-{
-    UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video Encoder Worker thread exiting."));
-}
-// =====================================================================================
 // UIVRVideoEncoder Implementation
 // =====================================================================================
-
 UIVRVideoEncoder::UIVRVideoEncoder()
-    : EncoderCommandFactory(nullptr)
+    : EncoderCommandFactory(nullptr) 
     , FFmpegProcHandle() 
     , FFmpegStdoutLogReader(nullptr)
     , FFmpegStderrLogReader(nullptr)
@@ -144,7 +42,6 @@ UIVRVideoEncoder::UIVRVideoEncoder()
 {
     NewFrameEvent = FPlatformProcess::GetSynchEventFromPool(false);
 }
-
 UIVRVideoEncoder::~UIVRVideoEncoder()
 {
     // Destructor (BeginDestroy é o principal ponto de limpeza para UObjects)
@@ -170,8 +67,7 @@ FString UIVRVideoEncoder::GetFFmpegExecutablePathInternal() const
     {
         return FFmpegExecutablePath;
     }
-
-    // Caso contrário, construa o caminho padrão relativo ao plugin.
+// Caso contrário, construa o caminho padrão relativo ao plugin.
     FString PluginDir = FPaths::ProjectPluginsDir() / TEXT("IVR");
     FString Path = FPaths::Combine(PluginDir, TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
 #if PLATFORM_WINDOWS
@@ -201,8 +97,7 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
     FFmpegExecutablePath = InFFmpegExecutablePath;
     ActualProcessingWidth = InActualFrameWidth;   // Armazena a largura real
     ActualProcessingHeight = InActualFrameHeight; // Armazena a altura real
-    FramePool = InFramePool; 
-
+    FramePool = InFramePool;
     if (!FramePool) // Verifica se o FramePool é válido
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("UIVRVideoEncoder::Initialize: FramePool is null. Cannot initialize."));
@@ -223,7 +118,6 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
     EncoderCommandFactory->IVR_SetActualVideoDimensions(ActualProcessingWidth, ActualProcessingHeight); // NOVO
     EncoderCommandFactory->IVR_SetExecutablePath(FFmpegExecutablePath);
     EncoderCommandFactory->IVR_SetPipeSettings(); // Define as configurações padrão para o pipe.
-
     // 1. Gerar um nome de pipe único para esta sessão
     VideoPipeBaseName = FString::Printf(TEXT("IVIPipe%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Mid(0,5));
     // 2. Configurar o Named Pipe para vídeo
@@ -232,7 +126,6 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
     PipeSettings.bBlockingMode = true; // Escrita bloqueante para garantir dados sequenciais
     PipeSettings.bMessageMode = false; // Modo byte stream para dados de vídeo raw
     PipeSettings.bDuplexAccess = false; // Apenas o UE escreve, FFmpeg lê
-
     // Tentar criar o Named Pipe
     if (!VideoInputPipe.Create(PipeSettings, TEXT(""))) // Passamos string vazia para SessionID pois já está no BasePipeName
     {
@@ -243,7 +136,6 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
     // Inicia a worker thread para escrever frames no pipe
     WorkerRunnable = new FVideoEncoderWorker(this, FrameQueue, VideoInputPipe, bStopWorkerThread, bNoMoreFramesToEncode, NewFrameEvent, FramePool);
     WorkerThread = FRunnableThread::Create(WorkerRunnable, TEXT("IVRVideoEncoderWorkerThread"), 0, TPri_Normal);
-
     if (!WorkerThread)
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to create video encoder worker thread. Cleaning up."));
@@ -270,8 +162,7 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         UE_LOG(LogIVRVideoEncoder, Warning, TEXT("FFmpeg process is already running. Please call ShutdownEncoder() first."));
         return false;
     }
-
-    // Limpa handle de processo anterior, se houver
+// Limpa handle de processo anterior, se houver
     if (FFmpegProcHandle.IsValid())
     {
         UE_LOG(LogIVRVideoEncoder, Warning, TEXT("FFmpeg process already running. Terminating previous process."));
@@ -291,8 +182,7 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("FFmpeg executable path is empty. Cannot launch encoder."));
         return false;
     }
-
-    // Constrói o Comando FFmpeg para a gravação ao vivo (ex: libx264)
+// Constrói o Comando FFmpeg para a gravação ao vivo (ex: libx264)
     EncoderCommandFactory->IVR_BuildLibx264Command();
     FString Arguments = EncoderCommandFactory->IVR_GetEncoderCommand("libx264");
     
@@ -301,8 +191,7 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
     FPlatformProcess::CreatePipe(FFmpegReadPipeStdout, FFmpegWritePipeStdout);
     FPlatformProcess::CreatePipe(FFmpegReadPipeStderr, FFmpegWritePipeStderr); 
     
-    uint32 LaunchedProcessId = 0; 
-
+    uint32 LaunchedProcessId = 0;
     FFmpegProcHandle = FPlatformProcess::CreateProc(
         *ExecPath,
         *Arguments,
@@ -310,7 +199,7 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         true,    // bLaunchHidden
         true,    // bLaunchReallyHidden
         &LaunchedProcessId,
-        -1,       // PriorityModifier
+        -1,      // PriorityModifier
         nullptr, // OptionalWorkingDirectory
         FFmpegWritePipeStdout, // stdout do FFmpeg vai para este pipe
         FFmpegWritePipeStderr  // stderr do FFmpeg vai para este pipe
@@ -325,7 +214,6 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         FFmpegReadPipeStderr = nullptr; FFmpegWritePipeStderr = nullptr;
         return false;
     }
-
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("FFmpeg main process launched successfully. PID: %d"), LaunchedProcessId);
     
     // Cria dois FFMpegLogReader, um para stdout e outro para stderr
@@ -337,16 +225,6 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
     // Importante: Feche as extremidades de escrita dos pipes no processo pai, pois o FFmpeg as herdou.
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStdout);
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStderr);
-
-    // C3: Mover Conexão do Pipe para a Thread Worker - REMOVIDO DA GAME THREAD**
-    // UE_LOG(LogIVRVideoEncoder, Log, TEXT("Awaiting FFmpeg connection to video input pipe..."));**
-    // if (!VideoInputPipe.Connect())
-    // {
-    //     UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to connect Video Named Pipe to FFmpeg. Aborting encoding."));
-    //     ShutdownEncoder(); // Realiza uma limpeza completa em caso de falha de conexão
-    //     return false;
-    // }
-    // UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video input pipe successfully connected."));**
 
     return true;
 }
@@ -379,7 +257,6 @@ void UIVRVideoEncoder::ShutdownEncoder()
     bIsInitialized.AtomicSet(false); 
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("UIVRVideoEncoder shut down successfully."));
 }
-
 bool UIVRVideoEncoder::EncodeFrame(FIVR_VideoFrame Frame)
 {
     if (!bIsInitialized) 
@@ -402,9 +279,8 @@ bool UIVRVideoEncoder::EncodeFrame(FIVR_VideoFrame Frame)
     }
 
     // LOG DE DEBUG: Confirma o tamanho do frame antes de enfileirar no Encoder
-    UE_LOG(LogIVRVideoEncoder, Warning, TEXT("UIVRVideoEncoder: Enqueuing frame for worker. RawDataPtr size: %d"), 
-        Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0);
-
+    // UE_LOG(LogIVRVideoEncoder, Warning, TEXT("UIVRVideoEncoder: Enqueuing frame for worker. RawDataPtr size: %d"), 
+    //    Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0); // Descomente para debug intenso
     FrameQueue.Enqueue(MoveTemp(Frame)); // Usa MoveTemp para otimizar o TSharedPtr
     
     if (NewFrameEvent) NewFrameEvent->Trigger();
@@ -430,7 +306,6 @@ bool UIVRVideoEncoder::FinishEncoding()
     {
         FPlatformProcess::Sleep(0.01f); // Pequena pausa para permitir que o worker processe
     }
-
     // Fecha o pipe de entrada para sinalizar EOF ao FFmpeg.
     // É crucial fechar o pipe APENAS depois que todos os dados foram escritos.
     if (VideoInputPipe.IsValid())
@@ -453,7 +328,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     // 1. Criar um arquivo temporário com a lista de takes
     FString FileListPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("IVRTemp"), TEXT("filelist.txt"));
     FString FileListContent;
-
     for (const FString& TakePath : InTakePaths)
     {
         FileListContent += FString::Printf(TEXT("file '%s'\n"), *TakePath);
@@ -465,7 +339,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
         return false;
     }
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Created filelist for concatenation at: %s"), *FileListPath);
-
     // 2. Construir o comando FFmpeg para concatenação
     EncoderCommandFactory->IVR_BuildConcatenationCommand(FileListPath, InMasterOutputPath);
     FString ConcatenationArguments = EncoderCommandFactory->IVR_GetEncoderCommand("ConcatenateTakes");
@@ -478,7 +351,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
         PlatformFile.DeleteFile(*FileListPath);
         return false;
     }
-
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Launching FFmpeg for concatenation. Executable: %s , Arguments: %s"), *ExecPath, *ConcatenationArguments);
     // 3. Lançar um novo processo FFmpeg para a concatenação
     FProcHandle ConcatenationProcHandle = FPlatformProcess::CreateProc(
@@ -493,7 +365,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
         nullptr, // StdOut (não precisamos capturar para concatenação simples)
         nullptr  // StdErr
     );
-
     if (!ConcatenationProcHandle.IsValid())
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to create FFmpeg process for concatenation. Check path and arguments."));
@@ -508,7 +379,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     int32 ReturnCode = -1;
     FPlatformProcess::GetProcReturnCode(ConcatenationProcHandle, &ReturnCode);
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("FFmpeg concatenation process finished with code: %d"), ReturnCode);
-
     // 5. Limpar recursos
     FPlatformProcess::CloseProc(ConcatenationProcHandle);
     
@@ -528,14 +398,12 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
 void UIVRVideoEncoder::InternalCleanupEncoderResources()
 {
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Cleaning up video encoder internal resources..."));
-
     // Apenas fecha o pipe se ele ainda estiver aberto (FinishEncoding já o faz).
     if (VideoInputPipe.IsValid())
     {
         VideoInputPipe.Close();
         UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video input pipe explicitly closed during cleanup."));
     }
-
     // Limpa e deleta os leitores de log do FFmpeg (stdout e stderr)
     if (FFmpegStdoutLogReader)
     {
@@ -568,6 +436,5 @@ void UIVRVideoEncoder::InternalCleanupEncoderResources()
         FPlatformProcess::CloseProc(FFmpegProcHandle); // Libera o handle do processo
         FFmpegProcHandle.Reset();
     }
-
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video encoder internal resources cleaned up."));
 }

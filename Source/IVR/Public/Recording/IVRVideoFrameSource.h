@@ -1,12 +1,11 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of Williäm Wolff and protected by copywright law.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Recording/IVRFrameSource.h"
+#include "IVRFramePool.h"
 
 // Includes para Threading
 #include "HAL/Runnable.h"       // Para FRunnable
@@ -17,13 +16,10 @@
 #include "TimerManager.h" // For FTimerHandle and FTimerManager
 #include <atomic> // Necessário para std::atomic (mesmo sem cv::)
 
-// Forward declare do worker thread
-class FVideoFileCaptureWorker;
+// [MANUAL_REF_POINT] FVideoFileCaptureWorker agora é de IVROpenCVBridge
+#include "FVideoFileCaptureWorker.h"
 
-// **CORREÇÃO CRÍTICA**: O include do arquivo .generated.h DEVE SER O ÚLTIMO include
-// em qualquer arquivo de cabeçalho UObject.
 #include "IVRVideoFrameSource.generated.h"
-
 /**
  * @brief Fonte de frames que lê de um arquivo de vídeo usando OpenCV em um thread separado.
  */
@@ -48,7 +44,6 @@ public:
      * @brief Desliga a fonte de frames e libera seus recursos.
      */
     virtual void Shutdown() override;
-
     /**
      * @brief Inicia a captura de frames do arquivo de vídeo.
      */
@@ -72,7 +67,6 @@ public:
      */
     UFUNCTION(BlueprintPure, Category = "IVR|VideoFile")
     int32 GetActualFrameHeight() const;
-
     /**
      * @brief Retorna o FPS nativo do arquivo de vídeo.
      * Válido após Initialize.
@@ -99,13 +93,11 @@ protected:
 
     /** Fila thread-safe para passar frames do worker thread (produtor) para o Game Thread (consumidor). */
     TQueue<FIVR_VideoFrame, EQueueMode::Mpsc> CapturedFrameQueue;
-
     /** Flag atômica para sinalizar à thread worker para parar. */
     FThreadSafeBool bShouldStopWorker;
 
     /** Evento para sinalizar novos frames disponíveis do worker thread para o Game Thread. */
     FEvent* NewFrameEvent;
-
     /**
      * @brief Função de callback do timer para pegar frames da fila e broadcastá-los.
      * Executada no Game Thread.
