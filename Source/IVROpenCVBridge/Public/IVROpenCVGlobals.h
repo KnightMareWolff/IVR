@@ -2,84 +2,61 @@
 #pragma once
 
 #include "CoreMinimal.h" // Para FVector2D, FVector, FTransform, TArray, etc.
-#include "UObject/NoExportTypes.h" // Para FTransform, FIntPoint, etc.
-#include "Containers/Array.h" // Para TArray
-#include "Misc/Guid.h" // Para FGuid
-#include "Misc/Paths.h" // Para FPaths
-#include "HAL/PlatformFileManager.h" // Para IPlatformFileManager
-#include "HAL/FileManager.h" // Para IFileManager
-#include "Modules/ModuleManager.h" // Para FModuleManager::LoadModuleChecked (para ImageWrapper)
-#include "IImageWrapper.h" // Para IImageWrapper
-#include "IImageWrapperModule.h" // Para IImageWrapperModule
-#include "Templates/SharedPointer.h" // Para TSharedPtr<IImageWrapper>
 
 // Adicione aqui DECLARE_LOG_CATEGORY_EXTERN(LogIVROpenCVBridge, Log, All); se precisar de uma categoria de log específica para este módulo
 #include "IVROpenCVBridge.h" // Para o LogCategory do módulo
 
-#include "IVROpenCVGlobals.generated.h" // MUITO IMPORTANTE: Este deve ser o último include de header.
-
-// --- Novas structs específicas do módulo IVROpenCVBridge ---
-
-// Struct para os pontos de interesse que serão retornados
-USTRUCT(BlueprintType)
-struct IVROPENCVBRIDGE_API FIVROCV_InterestPoint
+// Corresponde a FIVR_JustRTPoint
+struct IVROPENCVBRIDGE_API FOCV_NativeJustRTPoint
 {
-    GENERATED_BODY()
+    FVector2D Point2D;
+    FVector Point3D;
+    FVector Direction;
+    FVector2D Size2D;
+    float Angle;
+    bool IsQuad;
 
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    FVector2D Point2D; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    FVector Point3D; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    FVector Direction; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    FVector2D Size2D; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    float Angle; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features|Point")
-    bool IsQuad; 
+    FOCV_NativeJustRTPoint()
+        : Point2D(FVector2D::ZeroVector), Point3D(FVector::ZeroVector), Direction(FVector::ZeroVector),
+        Size2D(FVector2D::ZeroVector), Angle(0.0f), IsQuad(false) {
+    }
 };
 
-// Struct para todas as features extraídas
-USTRUCT(BlueprintType)
-struct IVROPENCVBRIDGE_API FIVROCV_ExtractedFeatures
+
+// Corresponde a FIVR_JustRTFeatures
+struct IVROPENCVBRIDGE_API FOCV_NativeJustRTFeatures
 {
-    GENERATED_BODY()
+    TArray<FOCV_NativeJustRTPoint> JustRTInterestPoints;
+    int32 BiggestPointIndex = INDEX_NONE;
+    int32 SmallerPointIndex = INDEX_NONE;
+    int32 NumOfQuads = 0;
+    int32 NumOfRectangles = 0;
+    TArray<float> HistogramRed;
+    TArray<float> HistogramGreen;
+    TArray<float> HistogramBlue;
 
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    TArray<FIVROCV_InterestPoint> InterestPoints; // Array dos pontos de interesse
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    int32 BiggestPointIndex = INDEX_NONE; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    int32 SmallerPointIndex = INDEX_NONE; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    int32 NumOfQuads = 0; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    int32 NumOfRectangles = 0; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    TArray<float> HistogramRed; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    TArray<float> HistogramGreen; 
-
-    UPROPERTY(BlueprintReadOnly, Category = "OpenCV|Features")
-    TArray<float> HistogramBlue; 
+    FOCV_NativeJustRTFeatures() {}
 };
 
-// --- Declarações de Funções Globais do Namespace ---
+// Corresponde a FIVR_JustRTFrame
+struct IVROPENCVBRIDGE_API FOCV_NativeJustRTFrame
+{
+    TArray<uint8> RawDataBuffer;
+    int32 Width;
+    int32 Height;
+    float Timestamp;
+    FLinearColor DisplayTint;
+    FLinearColor SourceFrameTint;
+    FOCV_NativeJustRTFeatures Features; // Usa a struct nativa de features
+
+    FOCV_NativeJustRTFrame()
+        : Width(0), Height(0), Timestamp(0.0f), DisplayTint(FLinearColor::White), SourceFrameTint(FLinearColor::White) {
+    }
+};
 
 namespace IVROpenCVBridge
 {
+    
     // Declaração da função ProcessFrameAndExtractFeatures com os novos tipos
     IVROPENCVBRIDGE_API void ProcessFrameAndExtractFeatures(
         uint8* PixelData,
@@ -91,7 +68,7 @@ namespace IVROpenCVBridge
         float QualityLevel,
         float MinDistance,
         bool bDebugDrawFeatures,
-        FIVROCV_ExtractedFeatures& OutFeatures
+        FOCV_NativeJustRTFeatures& OutFeatures
     );
 
     // Funções para migrar a lógica de LoadImageFromFile (redimensionamento OpenCV)
@@ -100,7 +77,5 @@ namespace IVROpenCVBridge
     // Funções para listar webcams
     IVROPENCVBRIDGE_API TArray<FString> ListWebcamDevicesNative();
 
-    // Helper para ImageWrapper
-    IVROPENCVBRIDGE_API TSharedPtr<IImageWrapper> GetImageWrapperByExtention(FString InImagePath);
 
 } // namespace IVROpenCVBridge

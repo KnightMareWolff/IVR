@@ -4,7 +4,7 @@
 // Proibited copy or distribution without expressed authorization of the Author.
 #include "IVROpenCVGlobals.h" // NOSSO NOVO ARQUIVO DE CABEÇALHO GLOBAL
 #include "IVROpenCVBridge.h" // Para LogCategory do módulo IVROpenCVBridge
-#include "Misc/FileHelper.h" // <--- ADICIONE ESTA LINHA AQUI!
+
 // Includes do OpenCV
 #include "OpenCVHelper.h"
 #include "PreOpenCVHeaders.h" 
@@ -28,11 +28,11 @@ namespace IVROpenCVBridge
         float QualityLevel,
         float MinDistance,
         bool bDebugDrawFeatures,
-        FIVROCV_ExtractedFeatures& OutFeatures // Saída das features
+        FOCV_NativeJustRTFeatures& OutFeatures // Saída das features
     )
     {
         // Limpa as features antigas para garantir um estado limpo
-        OutFeatures.InterestPoints.Empty();
+        OutFeatures.JustRTInterestPoints.Empty();
         OutFeatures.HistogramRed.Empty();
         OutFeatures.HistogramGreen.Empty();
         OutFeatures.HistogramBlue.Empty();
@@ -81,7 +81,7 @@ namespace IVROpenCVBridge
                 {
                     cv::Rect BoundingRect = cv::boundingRect(Approx);
                     
-                    FIVROCV_InterestPoint CurrentInterestPoint; // Usar nossa nova struct local
+                    FOCV_NativeJustRTPoint CurrentInterestPoint; // Usar nossa nova struct local
                     CurrentInterestPoint.Point2D = FVector2D(BoundingRect.x + BoundingRect.width / 2.0f, BoundingRect.y + BoundingRect.height / 2.0f); 
                     CurrentInterestPoint.Size2D = FVector2D(BoundingRect.width, BoundingRect.height);
                     
@@ -116,19 +116,19 @@ namespace IVROpenCVBridge
                     CurrentInterestPoint.Point3D = FVector::ZeroVector; 
                     CurrentInterestPoint.Direction = FVector::ZeroVector; 
                     
-                    OutFeatures.InterestPoints.Add(CurrentInterestPoint);
+                    OutFeatures.JustRTInterestPoints.Add(CurrentInterestPoint);
                     AllDetectedShapesForDrawing.push_back(RotatedRect);
 
                     // Atualiza índices do maior e menor
                     if (contourArea > MaxShapeArea)
                     {
                         MaxShapeArea = contourArea;
-                        MaxShapeIndex = OutFeatures.InterestPoints.Num() - 1;
+                        MaxShapeIndex = OutFeatures.JustRTInterestPoints.Num() - 1;
                     }
                     if (contourArea < MinShapeArea)
                     {
                         MinShapeArea = contourArea;
-                        MinShapeIndex = OutFeatures.InterestPoints.Num() - 1;
+                        MinShapeIndex = OutFeatures.JustRTInterestPoints.Num() - 1;
                     }
                 }
             }
@@ -193,69 +193,6 @@ namespace IVROpenCVBridge
         }
     }
 
-    bool LoadAndResizeImage(const FString& FilePath, int32 TargetWidth, int32 TargetHeight, TArray<uint8>& OutRawData)
-    {
-        TArray<uint8> CompressedData;
-        if (!FFileHelper::LoadFileToArray(CompressedData, *FilePath))
-        {
-            UE_LOG(LogIVROpenCVBridge, Error, TEXT("IVROpenCVBridge: Falha ao carregar arquivo de imagem para array: %s"), *FilePath);
-            return false;
-        }
-        TSharedPtr<IImageWrapper> ImageWrapper = GetImageWrapperByExtention(FilePath);
-        if (!ImageWrapper.IsValid())
-        {
-            UE_LOG(LogIVROpenCVBridge, Error, TEXT("IVROpenCVBridge: Falha ao criar wrapper de imagem para o formato: (%s)"), *FilePath);
-            return false;
-        }
-
-        if (!ImageWrapper->SetCompressed(CompressedData.GetData(), CompressedData.Num()))
-        {
-            UE_LOG(LogIVROpenCVBridge, Error, TEXT("IVROpenCVBridge: Falha ao definir dados compactados ou descomprimir imagem para: %s"), *FilePath);
-            return false;
-        }
-        TArray<uint8> DecompressedData;
-        ERGBFormat ImageFormatToUse = ERGBFormat::BGRA;
-        if (!ImageWrapper->GetRaw(ImageFormatToUse, 8, DecompressedData))
-        {
-            ImageFormatToUse = ERGBFormat::RGBA;
-            if (!ImageWrapper->GetRaw(ImageFormatToUse, 8, DecompressedData))
-            {
-                UE_LOG(LogIVROpenCVBridge, Error, TEXT("IVROpenCVBridge: Falha ao obter dados brutos da imagem (BGRA ou RGBA) para: %s"), *FilePath);
-                return false;
-            }
-        }
-        // Converter RGBA para BGRA se a imagem original for RGBA
-        if (ImageFormatToUse == ERGBFormat::RGBA)
-        {
-            const int32 NumPixels = ImageWrapper->GetWidth() * ImageWrapper->GetHeight();
-            TArray<uint8> BGRATempData;
-            BGRATempData.SetNumUninitialized(NumPixels * 4);
-            for (int32 i = 0; i < NumPixels; ++i)
-            {
-                BGRATempData[i * 4 + 0] = DecompressedData[i * 4 + 2]; // B
-                BGRATempData[i * 4 + 1] = DecompressedData[i * 4 + 1]; // G
-                BGRATempData[i * 4 + 2] = DecompressedData[i * 4 + 0]; // R
-                BGRATempData[i * 4 + 3] = DecompressedData[i * 4 + 3]; // A
-            }
-            DecompressedData = MoveTemp(BGRATempData);
-        }
-
-        cv::Mat OriginalImageMat(ImageWrapper->GetHeight(), ImageWrapper->GetWidth(), CV_8UC4, DecompressedData.GetData());
-        if (OriginalImageMat.cols != TargetWidth || OriginalImageMat.rows != TargetHeight)
-        {
-            UE_LOG(LogIVROpenCVBridge, Warning, TEXT("IVROpenCVBridge: Dimensões da imagem (%dx%d) não correspondem às do alvo (%dx%d) para %s. Redimensionando..."),
-                   OriginalImageMat.cols, OriginalImageMat.rows, TargetWidth, TargetHeight, *FilePath);
-            cv::Mat ResizedImageMat;
-            cv::resize(OriginalImageMat, ResizedImageMat, cv::Size(TargetWidth, TargetHeight), 0, 0, cv::INTER_AREA);
-            OutRawData.SetNumUninitialized(ResizedImageMat.total() * ResizedImageMat.elemSize());
-            FMemory::Memcpy(OutRawData.GetData(), ResizedImageMat.data, ResizedImageMat.total() * ResizedImageMat.elemSize());
-        }
-        else
-        {
-            OutRawData = MoveTemp(DecompressedData);
-        }
-        return true;
-    }
 
     TArray<FString> ListWebcamDevicesNative()
     {
@@ -280,34 +217,6 @@ namespace IVROpenCVBridge
         return Devices;
     }
 
-    TSharedPtr<IImageWrapper> GetImageWrapperByExtention(FString InImagePath)
-    {
-        IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
-        if (InImagePath.EndsWith(".png"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
-        }
-        else if (InImagePath.EndsWith(".jpg") || InImagePath.EndsWith(".jpeg"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::JPEG);
-        }
-        else if (InImagePath.EndsWith(".bmp"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::BMP);
-        }
-        else if (InImagePath.EndsWith(".ico"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICO);
-        }
-        else if (InImagePath.EndsWith(".exr"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::EXR);
-        }
-        else if (InImagePath.EndsWith(".icns"))
-        {
-            return ImageWrapperModule.CreateImageWrapper(EImageFormat::ICNS);
-        }
-        return nullptr;
-    }
+    
 
 } // namespace IVROpenCVBridge

@@ -7,64 +7,38 @@ public class IVROpenCVBridge : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        // Este mÃ³dulo IVROpenCVBridge Ã© dedicado a encapsular a lÃ³gica nativa C++ e a integraÃ§Ã£o com OpenCV.
-        // Ele nÃ£o conterÃ¡ UObjects. Portanto, RTTI e ExceÃ§Ãµes podem/devem ser habilitados aqui,
-        // pois bibliotecas externas como OpenCV podem depender deles, especialmente no Linux.
-        bUseRTTI = true;
-        bEnableExceptions = true;
-        bDisableAutoRTFMInstrumentation = true; // NecessÃ¡rio quando exceÃ§Ãµes sÃ£o habilitadas
+        // ESTE MÓDULO NÃO CONTÉM UOBJECTS. ELE DEVE SER COMPILADO COM RTTI E EXCEÇÕES ATIVADOS.
+        bUseRTTI = true; // <<< CORREÇÃO IMPORTANTE: Ativar RTTI para compatibilidade com OpenCV.
+        bEnableExceptions = true; // OK.
+        bDisableAutoRTFMInstrumentation = true; // OK.
 
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
-                "Core",          // Tipos básicos, FString, TArray, FText, etc.
-                "CoreUObject",   // UObjects, Classes, Structs, etc.
-                "Engine",        // Funções de motor, atores, componentes, etc.
-                "Slate",         // UI (apenas editor ou runtime se for plugin de UI)
-                "SlateCore",     // Base para Slate (apenas editor ou runtime se for plugin de UI)
-                "UMG",           // UI via Unreal Motion Graphics
-                "RenderCore",    // Para acesso a recursos de renderização (e.g., Texturas)
-                "RHI",           // Render Hardware Interface (acesso direto à GPU)
-                "InputCore",     // Interação com entrada (teclado, mouse, gamepad)
-                "Projects",      // Necessário para FGuid, FPaths, IFileManager (manipulação de arquivos/caminhos)
-                "Renderer",      // Funções de renderização de alto nível
-                "CinematicCamera", // Se usa componentes de câmera cinematográfica
-                "ImageWrapper",  // Para carregar/salvar imagens (UIVRFolderFrameSource)
-                "MediaAssets",   // Se o plugin interage com assets de mídia da UE
-                "MediaUtils",
-                "IVRCore"
+                "Core",          // Tipos básicos da Unreal (FString, TArray, etc.)
+                "Projects",      // FPaths, FGuid, IFileManager (essencial para pipes, caminhos de arquivo)
+                "RenderCore",    // Pode ser necessário para tipos de renderização como FLinearColor, ou se RHI for usado.
+                // "RHI",           // Adicione se houver necessidade de acesso direto ao Render Hardware Interface neste módulo.
+                                 // Removido por padrão, se não for estritamente usado aqui.
+                "ImageWrapper",  // Necessário para as funções de carregamento de imagem que usam IImageWrapper.
+                "IVRCore",       // OK. Se este módulo contém as USTRUCTs que o IVR usa, mas não introduz UObjects problemáticos próprios.
             }
         );
 
-        // *** ADICIONE ESTES BLOCOS ***
-        PublicIncludePaths.AddRange(
-            new string[] {
-                Path.Combine(ModuleDirectory, "Public") // Adiciona explicitamente a pasta Public do módulo
-            }
-        );
-
-        PrivateIncludePaths.AddRange(
-            new string[] {
-                Path.Combine(ModuleDirectory, "Private") // Adiciona explicitamente a pasta Private do módulo
-            }
-        );
-        // ***************************
-
+        // Remova todas as dependências de UObject-modules de PrivateDependencyModuleNames também,
+        // a menos que haja uma razão muito específica e bem compreendida para mantê-las aqui (raro para uma bridge pura).
         PrivateDependencyModuleNames.AddRange(
             new string[]
             {
-                // Se precisar de alguma funcionalidade bÃ¡sica interna do Engine aqui (ex: FileManager)
-                // "Core", // JÃ¡ estÃ¡ em Public, mas se tiver dependÃªncias privadas adicionais
+                // Nenhum por padrão para um módulo de bridge C++ puro.
             }
         );
 
-        // DependÃªncias do OpenCV (da Epic Games)
-        // O OpenCV Ã© uma dependÃªncia crucial para este mÃ³dulo, por isso Ã© incluÃ­do em todas as plataformas aplicÃ¡veis.
+        // Dependências do OpenCV (da Epic Games)
         if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Mac) || (Target.Platform == UnrealTargetPlatform.Linux))
         {
             PublicDependencyModuleNames.Add("OpenCV");
             PublicDependencyModuleNames.Add("OpenCVHelper");
-            // AdiÃ§Ã£o explÃ­cita do caminho pÃºblico do OpenCVHelper, necessÃ¡rio para encontrar cabeÃ§alhos.
             PrivateIncludePaths.AddRange(
                 new string[] {
                     Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "OpenCVHelper", "Public")
@@ -72,12 +46,10 @@ public class IVROpenCVBridge : ModuleRules
             );
         }
 
-        // Desativa Unity Builds se houver problemas de 'macro redefined' com bibliotecas de terceiros,
-        // especialmente comum em mÃ³dulos que integram muito C++ nativo e bibliotecas externas.
-        bUseUnity = false;
+        // Desativa Unity Builds.
+        bUseUnity = false; // OK.
 
-        // DefiniÃ§Ãµes especÃ­ficas da plataforma (ex: _CRT_SECURE_NO_WARNINGS para Windows).
-        // Isso ajuda na compatibilidade de cÃ³digo entre plataformas.
+        // Definições específicas da plataforma (ex: _CRT_SECURE_NO_WARNINGS para Windows).
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
             PublicDefinitions.Add("_CRT_SECURE_NO_WARNINGS");

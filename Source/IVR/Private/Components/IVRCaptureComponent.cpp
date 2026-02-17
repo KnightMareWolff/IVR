@@ -655,7 +655,7 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
             }
             
              // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
-            FIVROCV_ExtractedFeatures TempExtractedFeatures;
+            FOCV_NativeJustRTFeatures TempExtractedFeatures;
 
             // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
             IVROpenCVBridge::ProcessFrameAndExtractFeatures(
@@ -674,7 +674,7 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
             // Agora copiar os resultados da struct temporária para a FIVR_JustRTFrame original
             // Fazer a conversão de FIVROCV_InterestPoint para FIVR_JustRTPoint
             FrameOutput.Features.JustRTInterestPoints.Empty();
-            for (const FIVROCV_InterestPoint& OCVPoint : TempExtractedFeatures.InterestPoints)
+            for (const FOCV_NativeJustRTPoint& OCVPoint : TempExtractedFeatures.JustRTInterestPoints)
             {
                 FIVR_JustRTPoint RTPoint; // Esta struct ainda é do IVRCore
                 RTPoint.Point2D = OCVPoint.Point2D;
@@ -862,7 +862,7 @@ void UIVRCaptureComponent::ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFr
         //IVROpenCVBridge::ProcessFrameAndExtractFeatures(InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures);
         // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
         // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
-        FIVROCV_ExtractedFeatures TempExtractedFeatures;
+        FOCV_NativeJustRTFeatures TempExtractedFeatures;
         IVROpenCVBridge::ProcessFrameAndExtractFeatures(
                 InOutFrame.RawDataBuffer.GetData(), // Passar o ponteiro bruto para os pixels
                 InOutFrame.Width,
