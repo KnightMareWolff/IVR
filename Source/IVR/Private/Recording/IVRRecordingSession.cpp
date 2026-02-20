@@ -19,10 +19,8 @@
 
 #include "IVRVideoEncoder.h" // Inclui o novo encoder centralizado
 #include "IVRFramePool.h" // Adicionar este include!
-
 // Implementação do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRRecSession);
-
 UIVRRecordingSession::UIVRRecordingSession()
     : VideoEncoder(nullptr) 
     , RecordingThread(nullptr)
@@ -90,7 +88,6 @@ bool UIVRRecordingSession::StartRecording()
         UE_LOG(LogIVRRecSession, Error, TEXT("VideoEncoder is not initialized. Cannot start recording."));
         return false;
     }
-
     bIsRecording.AtomicSet(true);
     bIsPaused.AtomicSet(false);
     bStopThread.AtomicSet(false);
@@ -100,7 +97,6 @@ bool UIVRRecordingSession::StartRecording()
     
     // Gera o caminho completo para o take atual.
     CurrentTakeFilePath = GenerateTakeFilePath();
-
     // Lança o processo FFmpeg através do VideoEncoder.
     // Passa o caminho do take atual para o encoder.
     if (!VideoEncoder->LaunchEncoder(CurrentTakeFilePath))
@@ -128,7 +124,6 @@ bool UIVRRecordingSession::StartRecording()
     UE_LOG(LogIVRRecSession, Log, TEXT("FFmpeg recording session started for take: %s"), *CurrentTakeFilePath);
     return true; 
 }
-
 void UIVRRecordingSession::StopRecording()
 {
     // Validação robusta para evitar warnings falsos ou tentar parar algo que já está parado.
@@ -164,7 +159,6 @@ void UIVRRecordingSession::StopRecording()
         RecordingThread = nullptr;
         UE_LOG(LogIVRRecSession, Log, TEXT("Recording thread stopped."));
     }
-
     // Agora, desliga o processo principal do FFmpeg através do VideoEncoder.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
@@ -185,7 +179,6 @@ void UIVRRecordingSession::PauseRecording()
         UE_LOG(LogIVRRecSession, Log, TEXT("Recording session paused for take: %s"), *SessionID);
     }
 }
-
 void UIVRRecordingSession::ResumeRecording()
 {
     if (bIsRecording && bIsPaused)
@@ -207,7 +200,6 @@ void UIVRRecordingSession::ClearQueues()
 {
     FIVR_VideoFrame DummyVideoFrame;
     while (VideoFrameProducerQueue.Dequeue(DummyVideoFrame)) {}
-
     VideoConsumerQCounter = 0;
     VideoProducerQCounter = 0;
 }
@@ -223,7 +215,7 @@ void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mu
         }
         return;
     }
-// Use a taxa de quadros alvo para estimar um limite de buffer mais preciso
+    // Use a taxa de quadros alvo para estimar um limite de buffer mais preciso
     int32 MaxBufferedFrames = (UserRecordingSettings.FPS > 0) ? FMath::CeilToInt(UserRecordingSettings.FPS * 1.0f) : 30; 
     if (VideoProducerQCounter >= MaxBufferedFrames) 
     {
@@ -235,34 +227,49 @@ void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mu
         }
         return; 
     }
-// LOG DE DEBUG: Confirma o tamanho do frame que está sendo enfileirado
+    // LOG DE DEBUG: Confirma o tamanho do frame que está sendo enfileirado
     // UE_LOG(LogIVRRecSession, Warning, TEXT("UIVRRecordingSession: Enqueuing frame. RawDataPtr size: %d"), 
     //    Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0); // Descomente para debug intenso
-// Enfileira o frame para a worker thread processar. Usa MoveTemp para mover o TSharedPtr eficientemente.
+    // Enfileira o frame para a worker thread processar. Usa MoveTemp para mover o TSharedPtr eficientemente.
     VideoFrameProducerQueue.Enqueue(MoveTemp(Frame)); 
     VideoProducerQCounter++;
-
     if (HasNewFrameEvent)
     {
         HasNewFrameEvent->Trigger(); 
     }
 }
 
+// --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO ---
 FString UIVRRecordingSession::GenerateTakeFilePath()
 {
-    FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
-    FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
+    FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings");
+    // Adiciona subpasta customizada se especificado
+    if (!UserRecordingSettings.IVR_CustomOutputFolderName.IsEmpty())
+    {
+        BaseDir = FPaths::Combine(BaseDir, UserRecordingSettings.IVR_CustomOutputFolderName);
+    }
+
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-// C4: Garante que o diretório "Recordings" exista.
+    // Garante que o diretório "Recordings" (e subpastas) exista.
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
     }
     
-    FString NewTakePath = FString::Printf(TEXT("%s/%s_%s_Take.mp4"), *BaseDir, *Timestamp, *SessionID);
+    FString BaseFilenamePart = UserRecordingSettings.IVR_CustomOutputBaseFilename;
+    if (BaseFilenamePart.IsEmpty())
+    {
+        // Padrão se nenhum nome customizado for fornecido
+        BaseFilenamePart = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+    }
+    // Garante que o nome do arquivo seja válido para o sistema de arquivos
+    BaseFilenamePart = FPaths::MakeValidFileName(BaseFilenamePart);
+
+    FString NewTakePath = FPaths::Combine(BaseDir, FString::Printf(TEXT("%s_%s_Take.mp4"), *BaseFilenamePart, *SessionID));
     UE_LOG(LogIVRRecSession, Log, TEXT("Generated take file: %s"), *NewTakePath);
     return NewTakePath;
 }
+// --- FIM DA ALTERAÇÃO ---
 
 // C4: Ajuste para gerar o Master File Path de forma independente
 FString UIVRRecordingSession::GenerateMasterFilePath() const
@@ -280,7 +287,6 @@ FString UIVRRecordingSession::GenerateMasterFilePath() const
     UE_LOG(LogIVRRecSession, Log, TEXT("Generated Master file: %s"), *NewTakePath);
     return NewTakePath;
 }
-
 // --- FRunnable implementation ---
 bool UIVRRecordingSession::Init()
 {
@@ -348,7 +354,6 @@ void UIVRRecordingSession::Stop()
 {
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Stop signal received."));
 }
-
 void UIVRRecordingSession::Exit()
 {
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Exited."));

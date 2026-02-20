@@ -3,9 +3,8 @@
 // Proibited copy or distribution without expressed authorization of the Author.
 #include "IVROpenCVBridge/Public/FWebcamCaptureWorker.h"
 #include "IVROpenCVBridge.h" // Inclua o log principal do IVR se quiser usar LogIVROpenCVBridge
-// #include "IVROpenCVBridge/Public/IVROpenCVBridge.h" // Para LogCategory do módulo (se definido)
 
-// [MANUAL_REF_POINT] Includes do OpenCV - REMOVA OS #if/#endif AQUI
+// --- INÍCIO DA ALTERAÇÃO: Includes de OpenCV APENAS no arquivo .cpp ---
 #if WITH_OPENCV 
 #include "OpenCVHelper.h"
 #include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
@@ -16,6 +15,7 @@
 
 #include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
 #endif
+// --- FIM DA ALTERAÇÃO ---
 
 // Definição do LogCategory (se precisar, descomente e ajuste)
 // DEFINE_LOG_CATEGORY(LogIVROpenCVBridgeOpenCVBridge); // Exemplo de LogCategory para este módulo
@@ -34,29 +34,38 @@ FWebcamCaptureWorker::FWebcamCaptureWorker(UIVRFramePool* InFramePool, TQueue<FI
     , DesiredWidth(InWidth)
     , DesiredHeight(InHeight)
     , DesiredFPS(InFPS)
-#if WITH_OPENCV // Inicialização condicional para membros cv::
-    , WebcamCapture(InDeviceIndex, InApiPreference) // Inicializa com os parâmetros reais do OpenCV
-    , ApiPreference(InApiPreference)
+    // --- INÍCIO DA ALTERAÇÃO: Inicialização de OpenCVWebcamCapture e ApiPreference ---
+#if WITH_OPENCV
+    , OpenCVWebcamCapture(new cv::VideoCapture(InDeviceIndex, static_cast<cv::VideoCaptureAPIs>(InApiPreference))) // Aloca e inicializa com parâmetros
 #else
-    // Para o tipo dummy, o construtor padrão já é suficiente.
-    // A chamada open() será um stub.
-    // É importante inicializar ApiPreference também.
-    , ApiPreference(InApiPreference) 
+    , OpenCVWebcamCapture(nullptr) // Fallback se OpenCV não estiver habilitado
 #endif
+    , ApiPreference(InApiPreference)
+    // --- FIM DA ALTERAÇÃO ---
 {
-#if !WITH_OPENCV
-    // O log de erro agora é mais um aviso, já que o código pode compilar,
-    // mas a funcionalidade de webcam estará inativa.
-    UE_LOG(LogIVROpenCVBridge, Warning, TEXT("FWebcamCaptureWorker: OpenCV não habilitado. A captura de webcam não funcionará."));
-#endif
+    // --- INÍCIO DA ALTERAÇÃO: Remove o bloco de erro/fallback de OpenCV não habilitado ---
+    // A lógica de fallback e erro para WITH_OPENCV é agora tratada nos métodos
+    // Init(), Run(), etc. através do ponteiro.
+    // --- FIM DA ALTERAÇÃO ---
 }
+
 FWebcamCaptureWorker::~FWebcamCaptureWorker()
 {
-    if (WebcamCapture.isOpened()) // Chamada sempre válida devido ao tipo dummy
+    // --- INÍCIO DA ALTERAÇÃO: Liberação do OpenCVWebcamCapture ---
+#if WITH_OPENCV
+    if (OpenCVWebcamCapture)
     {
-        WebcamCapture.release(); // Chamada sempre válida devido ao tipo dummy
+        if (OpenCVWebcamCapture->isOpened())
+        {
+            OpenCVWebcamCapture->release();
+        }
+        delete OpenCVWebcamCapture;
+        OpenCVWebcamCapture = nullptr;
     }
+#endif
+    // --- FIM DA ALTERAÇÃO ---
 }
+
 bool FWebcamCaptureWorker::Init()
 {
     bShouldStop.AtomicSet(false);
@@ -69,29 +78,38 @@ uint32 FWebcamCaptureWorker::Run()
 {
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("WebcamCaptureWorker: Executando."));
 #if WITH_OPENCV
+    if (!OpenCVWebcamCapture)
+    {
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("WebcamCaptureWorker: OpenCVWebcamCapture é nulo no Run(). Parando thread."));
+        bShouldStop.AtomicSet(true);
+        return 1;
+    }
     cv::Mat Frame; // Matriz OpenCV para armazenar o frame
     // Tenta abrir a webcam no início do Run(), no worker thread.
-    WebcamCapture.open(DeviceIndex, ApiPreference);
-    if (!WebcamCapture.isOpened())
+    // --- INÍCIO DA ALTERAÇÃO: Uso do ponteiro para abrir a webcam ---
+    // OpenCVWebcamCapture->open(DeviceIndex, static_cast<cv::VideoCaptureAPIs>(ApiPreference)); // Já foi feito no construtor
+    // --- FIM DA ALTERAÇÃO ---
+    if (!OpenCVWebcamCapture->isOpened()) // Usa o ponteiro
     {
-        UE_LOG(LogIVROpenCVBridge, Error, TEXT("WebcamCaptureWorker: Falha ao abrir dispositivo de webcam %d com API %d. Parando thread de captura."), DeviceIndex, (int32)ApiPreference);
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("WebcamCaptureWorker: Falha ao abrir dispositivo de webcam %d com API %d. Parando thread de captura."), DeviceIndex, ApiPreference);
         bShouldStop.AtomicSet(true); // Sinaliza para parar
         return 1; // Retorna código de erro
     }
     // Tenta definir a resolução, FPS e codec *após* a abertura bem-sucedida
-    WebcamCapture.set(cv::CAP_PROP_FRAME_WIDTH , DesiredWidth);
-    WebcamCapture.set(cv::CAP_PROP_FRAME_HEIGHT, DesiredHeight);
-    WebcamCapture.set(cv::CAP_PROP_FPS, DesiredFPS);
-    WebcamCapture.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G')); // Tenta MJPG para melhor FPS/qualidade
+    OpenCVWebcamCapture->set(cv::CAP_PROP_FRAME_WIDTH , DesiredWidth); // Usa o ponteiro
+    OpenCVWebcamCapture->set(cv::CAP_PROP_FRAME_HEIGHT, DesiredHeight); // Usa o ponteiro
+    OpenCVWebcamCapture->set(cv::CAP_PROP_FPS, DesiredFPS); // Usa o ponteiro
+    OpenCVWebcamCapture->set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G')); // Tenta MJPG para melhor FPS/qualidade
     // Verifica as configurações aplicadas (podem não ser exatamente as desejadas pela webcam)
-    ActualFrameWidth.Set((int32)WebcamCapture.get(cv::CAP_PROP_FRAME_WIDTH));
-    ActualFrameHeight.Set((int32)WebcamCapture.get(cv::CAP_PROP_FRAME_HEIGHT));
+    ActualFrameWidth.Set((int32)OpenCVWebcamCapture->get(cv::CAP_PROP_FRAME_WIDTH)); // Usa o ponteiro
+    ActualFrameHeight.Set((int32)OpenCVWebcamCapture->get(cv::CAP_PROP_FRAME_HEIGHT)); // Usa o ponteiro
 
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("WebcamCaptureWorker: Abriu dispositivo %d com API %d. Resolução: %dx%d, FPS Real: %.1f"),
-           DeviceIndex, (int32)ApiPreference, ActualFrameWidth.GetValue(), ActualFrameHeight.GetValue(), (float)WebcamCapture.get(cv::CAP_PROP_FPS));
+           DeviceIndex, ApiPreference, ActualFrameWidth.GetValue(), ActualFrameHeight.GetValue(), (float)OpenCVWebcamCapture->get(cv::CAP_PROP_FPS)); // Usa o ponteiro
+
     while (!bShouldStop)
     {
-        if (!WebcamCapture.isOpened())
+        if (!OpenCVWebcamCapture->isOpened()) // Usa o ponteiro
         {
             UE_LOG(LogIVROpenCVBridge, Warning, TEXT("WebcamCaptureWorker: Webcam foi fechada inesperadamente. Parando thread de captura."));
             bShouldStop.AtomicSet(true);
@@ -99,7 +117,7 @@ uint32 FWebcamCaptureWorker::Run()
         }
 
         // Lê um frame da webcam (geralmente é uma chamada bloqueante até um frame estar disponível)
-        WebcamCapture.read(Frame);
+        OpenCVWebcamCapture->read(Frame); // Usa o ponteiro
         if (Frame.empty())
         {
             // Se o frame estiver vazio, pode ser que a webcam esteja sendo desconectada ou em um estado ruim
@@ -143,22 +161,33 @@ uint32 FWebcamCaptureWorker::Run()
         NewFrameEvent->Trigger(); 
     }
 #else // !WITH_OPENCV
+    // --- INÍCIO DA ALTERAÇÃO: Lógica de erro para WITH_OPENCV = false ---
     UE_LOG(LogIVROpenCVBridge, Warning, TEXT("WebcamCaptureWorker::Run: OpenCV não habilitado. Não é possível capturar frames."));
+    // --- FIM DA ALTERAÇÃO ---
 #endif // WITH_OPENCV
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("WebcamCaptureWorker: Saindo do loop de execução."));
     return 0; // Retorna sucesso
 }
+
 void FWebcamCaptureWorker::Stop()
 {
     bShouldStop.AtomicSet(true);
     if (NewFrameEvent) NewFrameEvent->Trigger(); // Acorda o Run para que ele possa sair do Wait
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("WebcamCaptureWorker: Sinal de parada recebido."));
 }
+
 void FWebcamCaptureWorker::Exit()
 {
-    if (WebcamCapture.isOpened()) // Chamada sempre válida devido ao tipo dummy
+    // --- INÍCIO DA ALTERAÇÃO: Liberação do OpenCVWebcamCapture ---
+#if WITH_OPENCV
+    if (OpenCVWebcamCapture) // A desalocação (delete) é feita no destrutor
     {
-        WebcamCapture.release(); // Chamada sempre válida devido ao tipo dummy
+        if (OpenCVWebcamCapture->isOpened())
+        {
+            OpenCVWebcamCapture->release();
+        }
     }
+#endif
+    // --- FIM DA ALTERAÇÃO ---
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("WebcamCaptureWorker: Encerrado."));
 }

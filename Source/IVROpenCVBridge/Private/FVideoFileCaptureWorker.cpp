@@ -3,9 +3,8 @@
 // Proibited copy or distribution without expressed authorization of the Author.
 #include "FVideoFileCaptureWorker.h"
 #include "IVROpenCVBridge.h" // Inclua o log principal do IVR se quiser usar LogIVR
-// #include "IVROpenCVBridge/Public/IVROpenCVBridge.h" // Para LogCategory do módulo (se definido)
 
-// [MANUAL_REF_POINT] Includes do OpenCV - REMOVA OS #if/#endif AQUI
+// --- INÍCIO DA ALTERAÇÃO: Includes de OpenCV APENAS no arquivo .cpp ---
 #if WITH_OPENCV 
 #include "OpenCVHelper.h"
 #include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
@@ -16,6 +15,7 @@
 
 #include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
 #endif
+// --- FIM DA ALTERAÇÃO ---
 
 // Definição do LogCategory (se precisar, descomente e ajuste)
 // DEFINE_LOG_CATEGORY(LogIVROpenCVBridge); // Exemplo de LogCategory para este módulo
@@ -32,74 +32,103 @@ FVideoFileCaptureWorker::FVideoFileCaptureWorker(UIVRFramePool* InFramePool, TQu
     , VideoFilePath(InVideoFilePath)
     , DesiredFPS(InDesiredFPS)
     , bLoopPlayback(InLoopPlayback)
-{
-#if !WITH_OPENCV
-    // Initialize fallback if OpenCV is not enabled
-    // VideoCapture = nullptr; // Este membro é cv::VideoCapture ou FDummyVideoCapture, não um ponteiro
-    UE_LOG(LogIVR, Error, TEXT("FVideoFileCaptureWorker: OpenCV não habilitado. A captura de vídeo não funcionará."));
+    // --- INÍCIO DA ALTERAÇÃO: Inicialização de OpenCVVideoCapture ---
+#if WITH_OPENCV
+    , OpenCVVideoCapture(new cv::VideoCapture()) // Aloca o objeto cv::VideoCapture
+#else
+    , OpenCVVideoCapture(nullptr) // Fallback se OpenCV não estiver habilitado
 #endif
+    // --- FIM DA ALTERAÇÃO ---
+{
+    // --- INÍCIO DA ALTERAÇÃO: Remove o bloco de erro/fallback de OpenCV não habilitado ---
+    // A lógica de fallback e erro para WITH_OPENCV é agora tratada nos métodos
+    // Init(), Run(), etc. através do ponteiro.
+    // --- FIM DA ALTERAÇÃO ---
 }
+
 FVideoFileCaptureWorker::~FVideoFileCaptureWorker()
 {
+    // --- INÍCIO DA ALTERAÇÃO: Liberação do OpenCVVideoCapture ---
 #if WITH_OPENCV
-    if (VideoCapture.isOpened())
+    if (OpenCVVideoCapture)
     {
-        VideoCapture.release();
+        if (OpenCVVideoCapture->isOpened())
+        {
+            OpenCVVideoCapture->release();
+        }
+        delete OpenCVVideoCapture;
+        OpenCVVideoCapture = nullptr;
     }
 #endif
+    // --- FIM DA ALTERAÇÃO ---
 }
+
 bool FVideoFileCaptureWorker::Init()
 {
 #if WITH_OPENCV
+    if (!OpenCVVideoCapture)
+    {
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("VideoFileCaptureWorker: OpenCVVideoCapture não inicializado."));
+        return false;
+    }
     // Converte FString para std::string, pois OpenCV opera com ela
     std::string VideoPathStd = TCHAR_TO_UTF8(*VideoFilePath);
-    VideoCapture.open(VideoPathStd);
+    OpenCVVideoCapture->open(VideoPathStd); // Usa o ponteiro para chamar o método
 
-    if (!VideoCapture.isOpened())
+    if (!OpenCVVideoCapture->isOpened()) // Usa o ponteiro para chamar o método
     {
         UE_LOG(LogIVROpenCVBridge, Error, TEXT("VideoFileCaptureWorker: Falha ao abrir arquivo de vídeo: %s"), *VideoFilePath);
         return false;
     }
 
-    ActualVideoFileFPS.store((float)VideoCapture.get(cv::CAP_PROP_FPS)); // Usando store() para std::atomic
-    VideoCapture.set(cv::CAP_PROP_FPS, DesiredFPS);
+    ActualVideoFileFPS.store((float)OpenCVVideoCapture->get(cv::CAP_PROP_FPS)); // Usa o ponteiro
+    OpenCVVideoCapture->set(cv::CAP_PROP_FPS, DesiredFPS); // Usa o ponteiro
     // Atualiza as dimensões reais após a abertura
-    ActualFrameWidth.Set((int32)VideoCapture.get(cv::CAP_PROP_FRAME_WIDTH));
-    ActualFrameHeight.Set((int32)VideoCapture.get(cv::CAP_PROP_FRAME_HEIGHT));
+    ActualFrameWidth.Set((int32)OpenCVVideoCapture->get(cv::CAP_PROP_FRAME_WIDTH)); // Usa o ponteiro
+    ActualFrameHeight.Set((int32)OpenCVVideoCapture->get(cv::CAP_PROP_FRAME_HEIGHT)); // Usa o ponteiro
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("VideoFileCaptureWorker: Abriu vídeo %s. Resolução: %dx%d, FPS Real: %.1f"),
            *VideoFilePath, ActualFrameWidth.GetValue(), ActualFrameHeight.GetValue(), ActualVideoFileFPS.load()); // Usando load() para std::atomic
 
     bShouldStop.AtomicSet(false);
     return true;
 #else
-    UE_LOG(LogIVR, Error, TEXT("FVideoFileCaptureWorker::Init: OpenCV não habilitado. Não é possível inicializar."));
+    // --- INÍCIO DA ALTERAÇÃO: Lógica de erro para WITH_OPENCV = false ---
+    UE_LOG(LogIVROpenCVBridge, Error, TEXT("FVideoFileCaptureWorker::Init: OpenCV não habilitado. Não é possível inicializar."));
     return false;
+    // --- FIM DA ALTERAÇÃO ---
 #endif
 }
+
 uint32 FVideoFileCaptureWorker::Run()
 {
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("VideoFileCaptureWorker: Executando."));
 #if WITH_OPENCV
+    if (!OpenCVVideoCapture)
+    {
+        UE_LOG(LogIVROpenCVBridge, Error, TEXT("VideoFileCaptureWorker: OpenCVVideoCapture é nulo no Run(). Parando thread."));
+        bShouldStop.AtomicSet(true);
+        return 1;
+    }
     cv::Mat Frame; // Matriz OpenCV para armazenar o frame
     
     while (!bShouldStop)
     {
-        if (!VideoCapture.isOpened())
+        if (!OpenCVVideoCapture->isOpened()) // Usa o ponteiro
         {
             UE_LOG(LogIVROpenCVBridge, Warning, TEXT("VideoFileCaptureWorker: Captura de vídeo não aberta, parando thread."));
             bShouldStop.AtomicSet(true);
             break;
         }
         // Lê um frame do vídeo
-        VideoCapture.read(Frame);
+        OpenCVVideoCapture->read(Frame); // Usa o ponteiro
         if (Frame.empty())
         {
             // Fim do vídeo ou erro de leitura
             if (bLoopPlayback)
             {
                 UE_LOG(LogIVROpenCVBridge, Log, TEXT("VideoFileCaptureWorker: Fim do vídeo alcançado, voltando ao início."));
-                VideoCapture.set(cv::CAP_PROP_POS_FRAMES, 0); // Volta para o início do vídeo
-                VideoCapture.read(Frame); // Tenta ler o primeiro frame
+                OpenCVVideoCapture->set(cv::CAP_PROP_POS_FRAMES, 0); // Usa o ponteiro
+                OpenCVVideoCapture->read(Frame); // Usa o ponteiro
                 if (Frame.empty()) // Se ainda estiver vazio, algo está errado
                 {
                     UE_LOG(LogIVROpenCVBridge, Error, TEXT("VideoFileCaptureWorker: Falha ao fazer loop no vídeo ou ler o primeiro frame após o loop. Parando."));
@@ -151,11 +180,14 @@ uint32 FVideoFileCaptureWorker::Run()
         NewFrameEvent->Trigger(); 
     }
 #else // !WITH_OPENCV
-    UE_LOG(LogIVR, Error, TEXT("FVideoFileCaptureWorker::Run: OpenCV não habilitado. Não é possível capturar frames."));
+    // --- INÍCIO DA ALTERAÇÃO: Lógica de erro para WITH_OPENCV = false ---
+    UE_LOG(LogIVROpenCVBridge, Error, TEXT("FVideoFileCaptureWorker::Run: OpenCV não habilitado. Não é possível capturar frames."));
+    // --- FIM DA ALTERAÇÃO ---
 #endif // WITH_OPENCV
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("VideoFileCaptureWorker: Saindo do loop de execução."));
     return 0;
 }
+
 void FVideoFileCaptureWorker::Stop()
 {
     bShouldStop.AtomicSet(true);
@@ -165,11 +197,16 @@ void FVideoFileCaptureWorker::Stop()
 
 void FVideoFileCaptureWorker::Exit()
 {
+    // --- INÍCIO DA ALTERAÇÃO: Liberação do OpenCVVideoCapture ---
 #if WITH_OPENCV
-    if (VideoCapture.isOpened())
+    if (OpenCVVideoCapture) // A desalocação (delete) é feita no destrutor
     {
-        VideoCapture.release();
+        if (OpenCVVideoCapture->isOpened())
+        {
+            OpenCVVideoCapture->release();
+        }
     }
 #endif
+    // --- FIM DA ALTERAÇÃO ---
     UE_LOG(LogIVROpenCVBridge, Log, TEXT("VideoFileCaptureWorker: Encerrado."));
 }

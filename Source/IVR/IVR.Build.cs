@@ -1,6 +1,6 @@
 // Copyright 2025 William Wolff. All Rights Reserved.
 // This code is property of Williäm Wolff and protected by copyright law.
-// Prohibited copy or distribution without expressed authorization of the Author.
+// Proibited copy or distribution without expressed authorization of the Author.
 
 using UnrealBuildTool;
 using System.IO;
@@ -16,13 +16,16 @@ public class IVR : ModuleRules
         bUseRTTI = false;
         bEnableExceptions = false;
         bDisableAutoRTFMInstrumentation = false;
-
         PublicIncludePaths.AddRange(
             new string[] {
                 Path.Combine(ModuleDirectory, "Public"),
                 Path.Combine(ModuleDirectory, "Public", "Components"),
                 Path.Combine(ModuleDirectory, "Public", "Recording"),
-                Path.Combine(ModuleDirectory, "Public", "UI")
+                Path.Combine(ModuleDirectory, "Public", "UI"),
+                // --- INÍCIO DA CORREÇÃO: Adicionar explicitamente o caminho Public do IVROpenCVBridge ---
+                // O caminho para IVROpenCVBridge/Public é relativo ao diretório do módulo IVR (../IVROpenCVBridge/Public)
+                Path.Combine(ModuleDirectory, "../IVROpenCVBridge", "Public")
+                // --- FIM DA CORREÇÃO ---
             }
         );
 
@@ -35,7 +38,6 @@ public class IVR : ModuleRules
                 // O caminho público do OpenCVHelper foi movido para IVROpenCVBridge
             }
         );
-
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
@@ -59,9 +61,7 @@ public class IVR : ModuleRules
                 
             }
         );
-
         // As dependências e includes específicos do OpenCV foram movidos para IVROpenCVBridge.Build.cs
-
         // Condicional para módulos RHI específicos de plataforma
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
@@ -87,7 +87,6 @@ public class IVR : ModuleRules
             // OpenGL ou Metal RHI para Mac, dependendo da versão do UE e necessidades.
             // PrivateDependencyModuleNames.Add("MetalRHI");
         }
-
         // Desativa Unity Builds para plugins complexos com compilação condicional.
         // Isso ajuda a evitar problemas de 'macro redefined' e com bibliotecas de terceiros.
         bUseUnity = false;

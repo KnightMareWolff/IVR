@@ -14,31 +14,18 @@
 #include <atomic> // Necessário para std::atomic
 #include <string> // Inclusão explícita para std::string
 
-// [MANUAL_REF_POINT] Includes do OpenCV
-#if WITH_OPENCV 
-#include "OpenCVHelper.h"
-#include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgproc.hpp>
+#include "IVROpenCVBridge.h"
 
-#include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
+// --- INÍCIO DA ALTERAÇÃO: Ocultar tipos OpenCV dos headers públicos ---
+// Não inclui headers de OpenCV aqui.
+namespace cv { class VideoCapture; } // Forward declaration para cv::VideoCapture
 
-// Define cv::VideoCaptureAPIs apenas se WITH_OPENCV estiver ativo
-using VideoCaptureAPIs = cv::VideoCaptureAPIs;
-#else
-// Caso contrário, define um tipo dummy para evitar erros de compilação
-struct FDummyVideoCapture {
-    bool isOpened() const { return false; }
-    void release() {}
-    void open(int index, int apiPreference) {}
-    void set(int propId, double value) {}
-    double get(int propId) { return 0.0; }
-    bool read(void* frame) { return false; }
-};
-using VideoCaptureAPIs = int; // Fallback para int se OpenCV não estiver habilitado
-#endif
+// Define um tipo para o API Preference do OpenCV.
+// Usamos 'int' como fallback seguro, já que o enum real 'cv::VideoCaptureAPIs'
+// não deve ser exposto aqui.
+using VideoCaptureAPIs = int;
+// --- FIM DA ALTERAÇÃO ---
 
 /**
  * @brief Worker thread para capturar frames de uma webcam usando OpenCV.
@@ -57,7 +44,7 @@ public:
      * @param InWidth Largura desejada para a captura.
      * @param InHeight Altura desejada para a captura.
      * @param InFPS FPS desejado para a captura.
-     * @param InApiPreference Preferência de API para OpenCV (e.g., cv::CAP_DSHOW).
+     * @param InApiPreference Preferência de API para OpenCV (e.g., cv::CAP_DSHOW como int).
      */
     FWebcamCaptureWorker(UIVRFramePool* InFramePool, TQueue<FIVR_VideoFrame, EQueueMode::Mpsc>& InQueue, FThreadSafeBool& InStopFlag, FEvent* InNewFrameEvent, int32 InDeviceIndex, int32 InWidth, int32 InHeight, float InFPS,
         VideoCaptureAPIs InApiPreference
@@ -67,6 +54,7 @@ public:
      * @brief Destrutor do worker, libera o VideoCapture.
      */
     virtual ~FWebcamCaptureWorker();
+
     /**
      * @brief Inicializa o worker. Não abre a webcam aqui para evitar bloqueios no início da thread.
      * @return true.
@@ -104,11 +92,8 @@ private:
     int32 DesiredHeight; // Altura desejada para a captura
     float DesiredFPS; // FPS desejado para a captura
 
-#if WITH_OPENCV // Membros OpenCV devem ser condicionalmente compilados
-    cv::VideoCapture WebcamCapture; // Objeto de captura de vídeo do OpenCV
-    cv::VideoCaptureAPIs ApiPreference; // Preferência de API para OpenCV
-#else
-    FDummyVideoCapture WebcamCapture; // Agora usa o tipo dummy
-    VideoCaptureAPIs ApiPreference; // Usa o 'using' para o tipo
-#endif
+    // --- INÍCIO DA ALTERAÇÃO: cv::VideoCapture agora é um ponteiro e ApiPreference é int ---
+    cv::VideoCapture* OpenCVWebcamCapture; // Objeto de captura de vídeo do OpenCV, agora ponteiro
+    int ApiPreference; // Preferência de API para OpenCV (int)
+    // --- FIM DA ALTERAÇÃO ---
 };

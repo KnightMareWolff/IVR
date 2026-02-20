@@ -1,6 +1,6 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #include "Recording/IVRRecordingManager.h"
@@ -15,9 +15,8 @@
 #include "IVR.h" 
 #include "IVRFramePool.h" 
 
-// Inicializa��o do Singleton Instance
+// Inicialização do Singleton Instance
 UIVRRecordingManager* UIVRRecordingManager::Instance = nullptr;
-
 UIVRRecordingManager* UIVRRecordingManager::Get()
 {
     if (!Instance)
@@ -32,24 +31,23 @@ UIVRRecordingManager* UIVRRecordingManager::Get()
 void UIVRRecordingManager::Initialize()
 {
     // REMOVIDO: AudioCapture = NewObject<UIVRAudioCaptureSystem>(this); 
-    UtilityVideoEncoder = NewObject<UIVRVideoEncoder>(this); // Cria uma inst�ncia para uso geral (ex: concatena��o)
+    UtilityVideoEncoder = NewObject<UIVRVideoEncoder>(this); // Cria uma instância para uso geral (ex: concatenação)
     UE_LOG(LogIVR, Log, TEXT("IVR Recording Manager initialized"));
 }
 
 void UIVRRecordingManager::Cleanup()
 {
-    // Limpa todas as sess�es ativas no momento do Cleanup
+    // Limpa todas as sessões ativas no momento do Cleanup
     for (int32 i = ActiveSessions.Num() - 1; i >= 0; --i)
     {
         if (ActiveSessions[i])
         {
-            StopRecording(ActiveSessions[i]); // Chamar StopRecording para cada sess�o
+            StopRecording(ActiveSessions[i]); // Chamar StopRecording para cada sessão
         }
     }
     ActiveSessions.Empty(); 
     
-    // REMOVIDO: AudioCapture = nullptr; 
-
+    // REMOVIDO: AudioCapture = nullptr;
     if (UtilityVideoEncoder)
     {
         UtilityVideoEncoder->ShutdownEncoder(); // Garante que o encoder de utilidade seja desligado
@@ -73,7 +71,6 @@ UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSetti
         UE_LOG(LogIVR, Error, TEXT("Failed to create new IVRRecordingSession."));
         return nullptr;
     }
-
     FString FFmpegPath = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("IVR"), TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
 #if PLATFORM_WINDOWS
     FFmpegPath = FPaths::Combine(FFmpegPath, TEXT("Win64"), TEXT("ffmpeg.exe"));
@@ -95,12 +92,10 @@ UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSetti
     UE_LOG(LogIVR, Log, TEXT("Started new recording session. FFmpeg path: %s"), *FFmpegPath);
     return NewSession;
 }
-
 void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
 {
     if (!Session)
         return;
-
     Session->StopRecording(); 
     
     FString SessionOutputPath = Session->GetOutputPath();
@@ -114,6 +109,11 @@ void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
         TakeInfo.FilePath = SessionOutputPath; 
         TakeInfo.SessionID = Session->GetSessionID(); 
         
+        // --- INÍCIO DA ALTERAÇÃO: SALVAR CONFIGURAÇÕES DE NOME CUSTOMIZADO NO TAKEINFO ---
+        TakeInfo.CustomOutputFolderName = Session->UserRecordingSettings.IVR_CustomOutputFolderName;
+        TakeInfo.CustomOutputBaseFilename = Session->UserRecordingSettings.IVR_CustomOutputBaseFilename;
+        // --- FIM DA ALTERAÇÃO ---
+
         CompletedTakes.Add(TakeInfo);
         UE_LOG(LogIVR, Log, TEXT("Take %d completed and added to list. File: %s"), TakeInfo.TakeNumber, *TakeInfo.FilePath);
     }
@@ -153,7 +153,6 @@ void UIVRRecordingManager::FinalizeAllRecordings(FString MasterVideoPath, const 
     {
         TakeFilePaths.Add(Take.FilePath);
     }
-
     UE_LOG(LogIVR, Log, TEXT("Starting master video concatenation of %d takes to: %s"), TakeFilePaths.Num(), *MasterVideoPath);
     if (UtilityVideoEncoder->ConcatenateVideos(TakeFilePaths, MasterVideoPath))
     {
@@ -179,6 +178,7 @@ void UIVRRecordingManager::ClearAllTakes()
     UE_LOG(LogIVR, Log, TEXT("Cleared all takes"));
 }
 
+// --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO ---
 FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
 {
     if (CompletedTakes.Num() == 0)
@@ -186,22 +186,35 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
         UE_LOG(LogIVR, Warning, TEXT("No completed takes to generate master video."));
         return FString();
     }
-
     FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
     FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+
+    // Usa a subpasta customizada do último take (assumindo consistência entre takes)
+    if (CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputFolderName.IsEmpty())
+    {
+        BaseDir = FPaths::Combine(BaseDir, CompletedTakes.Last().CustomOutputFolderName);
+    }
 
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
     }
     
-    FString CurrentSessionID = CompletedTakes.Num() > 0 ? CompletedTakes.Last().FilePath.Mid(CompletedTakes.Last().FilePath.Len() - 17, 5) : FGuid::NewGuid().ToString(EGuidFormats::Digits).Mid(0,5);
-    MasterVideoFilePath = FString::Printf(TEXT("%s/%s_%s_Master.mp4"), *BaseDir, *Timestamp, *CurrentSessionID);
+    FString CurrentSessionID = CompletedTakes.Num() > 0 ? CompletedTakes.Last().SessionID : FGuid::NewGuid().ToString(EGuidFormats::Digits).Mid(0,5);
+
+    // Usa o nome base customizado do último take, se disponível
+    FString MasterBaseFilename = CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputBaseFilename.IsEmpty()
+                               ? CompletedTakes.Last().CustomOutputBaseFilename
+                               : Timestamp;
+    MasterBaseFilename = FPaths::MakeValidFileName(MasterBaseFilename); // Garante nome de arquivo válido
+
+    MasterVideoFilePath = FString::Printf(TEXT("%s/%s_%s_Master.mp4"), *BaseDir, *MasterBaseFilename, *CurrentSessionID);
+    // --- FIM DA ALTERAÇÃO ---
+
     FString ConcatListFilePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Recordings"), FString::Printf(TEXT("concat_list_%s.txt"), *Timestamp));
     FString ConcatListContent;
     TArray<FString> TakeFilePaths;
-
     for (const FIVR_TakeInfo& Take : CompletedTakes)
     {
         ConcatListContent += FString::Printf(TEXT("file '%s'\n"), *Take.FilePath);
@@ -213,7 +226,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
         UE_LOG(LogIVR, Error, TEXT("Failed to save concat list file to: %s"), *ConcatListFilePath);
         return FString();
     }
-
     FString FFmpegPath = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("IVR"), TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
 #if PLATFORM_WINDOWS
     FFmpegPath = FPaths::Combine(FFmpegPath, TEXT("Win64"), TEXT("ffmpeg.exe"));
@@ -229,7 +241,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
 
     FString FFmpegArguments = FString::Printf(TEXT("-y -f concat -safe 0 -i %s -c copy -map 0:v %s"), *ConcatListFilePath, *MasterVideoFilePath); // Adicionado -map 0:v
     UE_LOG(LogIVR, Log, TEXT("Launching FFmpeg for concatenation. Executable: %s , Arguments: %s"), *FFmpegPath, *FFmpegArguments);
-
     if (!LaunchFFmpegProcessBlocking(FFmpegPath, FFmpegArguments))
     {
         UE_LOG(LogIVR, Error, TEXT("FFmpeg concatenation process failed."));
@@ -246,8 +257,7 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     
     return MasterVideoFilePath;
 }
-
-// Implementa��o da fun��o LaunchFFmpegProcessBlocking (AGORA P�BLICA)
+// Implementação da função LaunchFFmpegProcessBlocking (AGORA PÚBLICA)
 bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, const FString& Arguments)
 {
     FProcHandle ProcHandle = FPlatformProcess::CreateProc(
@@ -273,7 +283,6 @@ bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, 
     int32 ReturnCode = -1;
     FPlatformProcess::GetProcReturnCode(ProcHandle, &ReturnCode);
     FPlatformProcess::CloseProc(ProcHandle);
-
     if (ReturnCode != 0)
     {
         UE_LOG(LogIVR, Error, TEXT("FFmpeg concat process exited with error code: %d"), ReturnCode);
@@ -300,4 +309,3 @@ void UIVRRecordingManager::CleanupIndividualTakes()
         }
     }
 }
-

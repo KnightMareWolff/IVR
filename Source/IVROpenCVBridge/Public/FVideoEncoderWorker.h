@@ -9,10 +9,12 @@
 #include "HAL/ThreadSafeBool.h" // Para o mecanismo de "locked rendering"
 #include "HAL/PlatformProcess.h"
 #include "Containers/Queue.h"
+
 #include "IVRTypes.h" // Para FIVR_VideoFrame
 #include "IVRFramePool.h" // Para UIVRFramePool
 #include "IVR_PipeWrapper.h" // Para FIVR_PipeWrapper
 
+#include "IVROpenCVBridge.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogIVRVideoEncoderWorker, Log, All);
 

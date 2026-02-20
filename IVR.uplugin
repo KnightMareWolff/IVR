@@ -2,20 +2,32 @@
 	"FileVersion": 3,
 	"Version": 5,
 	"VersionName": "5.0",
-	"FriendlyName": "IVR - Insane Video Recorder",
-	"Description": "Advanced video recording system for Unreal Engine",
-	"Category": "Media",
-	"CreatedBy": "Williäm Wolff",
-	"CreatedByURL": "http://insaneframework.com",
-	"DocsURL": "",
-	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/099c0fd27b6e434db3adfaec71a2b82c",
-	"SupportURL": "http://insaneframework.com/ivr-camera-man/",
 	"EngineVersion": "5.6.0",
-	"CanContainContent": true,
-	"Installed": true,
+	"FriendlyName": "IVR - Insane Video Recorder",
+	"Description": "The ultimate solution for high-performance real-time video recording within Unreal Engine, designed for advanced simulation and game development.",
+	"Category": "Utilities",
+	"CreatedBy": "William Wolff",
+	"CreatedByURL": "https://www.insaneframework.com.br",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "imaster@insaneframework.com.br",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
 	"Modules": [
 		{
 			"Name": "IVR",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "IVRCore",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "IVROpenCVBridge",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}

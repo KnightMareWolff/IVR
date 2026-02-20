@@ -11,7 +11,6 @@
 #include "Internationalization/Text.h" // Para FText e FText::Format
 #include "Async/Async.h" // Para UE_LOG no thread
 #include "Misc/Paths.h" // Para FPaths
-
 // [MANUAL_REF_POINT] FFMpegLogReader e FIVR_PipeWrapper são agora de IVROpenCVBridge
 #include "IVROpenCVBridge/Public/FFmpegLogReader.h"
 #include "IVROpenCVBridge/Public/IVR_PipeWrapper.h"
@@ -20,7 +19,6 @@
 
 // Definição do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRVideoEncoder);
-
 // =====================================================================================
 // UIVRVideoEncoder Implementation
 // =====================================================================================
@@ -56,7 +54,6 @@ void UIVRVideoEncoder::BeginDestroy()
         FPlatformProcess::ReturnSynchEventToPool(NewFrameEvent);
         NewFrameEvent = nullptr;
     }
-
     Super::BeginDestroy();
 }
 
@@ -67,7 +64,7 @@ FString UIVRVideoEncoder::GetFFmpegExecutablePathInternal() const
     {
         return FFmpegExecutablePath;
     }
-// Caso contrário, construa o caminho padrão relativo ao plugin.
+    // Caso contrário, construa o caminho padrão relativo ao plugin.
     FString PluginDir = FPaths::ProjectPluginsDir() / TEXT("IVR");
     FString Path = FPaths::Combine(PluginDir, TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
 #if PLATFORM_WINDOWS
@@ -84,8 +81,6 @@ FString UIVRVideoEncoder::GetFFmpegExecutablePathInternal() const
     FPaths::NormalizeDirectoryName(Path);
     return Path;
 }
-
-
 bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool) 
 {
     if (bIsInitialized) 
@@ -144,7 +139,6 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
         WorkerRunnable = nullptr;
         return false;
     }
-
     bIsInitialized.AtomicSet(true); 
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("UIVRVideoEncoder initialized successfully."));
     return true;
@@ -156,13 +150,12 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("Encoder is not initialized. Call Initialize() first."));
         return false;
     }
-
     if (FFmpegProcHandle.IsValid())
     {
         UE_LOG(LogIVRVideoEncoder, Warning, TEXT("FFmpeg process is already running. Please call ShutdownEncoder() first."));
         return false;
     }
-// Limpa handle de processo anterior, se houver
+    // Limpa handle de processo anterior, se houver
     if (FFmpegProcHandle.IsValid())
     {
         UE_LOG(LogIVRVideoEncoder, Warning, TEXT("FFmpeg process already running. Terminating previous process."));
@@ -174,7 +167,6 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
     EncoderCommandFactory->IVR_SetOutputFilePath(LiveOutputFilePath);
     // Setta o caminho do pipe de entrada para o FFmpeg
     EncoderCommandFactory->IVR_SetInPipePath(VideoInputPipe.GetFullPipeName());
-
     // Pega Executavel FFmpeg
     FString ExecPath = GetFFmpegExecutablePathInternal();
     if (ExecPath.IsEmpty())
@@ -182,7 +174,7 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("FFmpeg executable path is empty. Cannot launch encoder."));
         return false;
     }
-// Constrói o Comando FFmpeg para a gravação ao vivo (ex: libx264)
+    // Constrói o Comando FFmpeg para a gravação ao vivo (ex: libx264)
     EncoderCommandFactory->IVR_BuildLibx264Command();
     FString Arguments = EncoderCommandFactory->IVR_GetEncoderCommand("libx264");
     
@@ -221,7 +213,6 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
     FFmpegStdoutLogReader->Start();
     FFmpegStderrLogReader = new FFMpegLogReader(FFmpegReadPipeStderr, TEXT("FFmpeg STDERR"));
     FFmpegStderrLogReader->Start();
-
     // Importante: Feche as extremidades de escrita dos pipes no processo pai, pois o FFmpeg as herdou.
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStdout);
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStderr);
@@ -241,7 +232,6 @@ void UIVRVideoEncoder::ShutdownEncoder()
     // 1. Sinaliza à worker thread para parar
     bStopWorkerThread.AtomicSet(true); 
     if (NewFrameEvent) NewFrameEvent->Trigger(); // Acorda a thread caso esteja esperando por um evento
-
     // 2. Aguarda a conclusão da worker thread
     if (WorkerThread)
     {
@@ -251,7 +241,6 @@ void UIVRVideoEncoder::ShutdownEncoder()
         delete WorkerRunnable;
         WorkerRunnable = nullptr;
     }
-
     // 3. Limpa os recursos internos (pipes de entrada) e processo FFmpeg
     InternalCleanupEncoderResources();
     bIsInitialized.AtomicSet(false); 
@@ -277,7 +266,6 @@ bool UIVRVideoEncoder::EncodeFrame(FIVR_VideoFrame Frame)
 
         return false;
     }
-
     // LOG DE DEBUG: Confirma o tamanho do frame antes de enfileirar no Encoder
     // UE_LOG(LogIVRVideoEncoder, Warning, TEXT("UIVRVideoEncoder: Enqueuing frame for worker. RawDataPtr size: %d"), 
     //    Frame.RawDataPtr.IsValid() ? Frame.RawDataPtr->Num() : 0); // Descomente para debug intenso
@@ -297,7 +285,6 @@ bool UIVRVideoEncoder::FinishEncoding()
     }
 
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Signaling UIVRVideoEncoder to finish encoding..."));
-
     // Sinaliza que não haverá mais frames para codificar
     bNoMoreFramesToEncode.AtomicSet(true);
     if (NewFrameEvent) NewFrameEvent->Trigger(); // Acorda a thread para processar quaisquer frames remanescentes na fila
@@ -317,7 +304,6 @@ bool UIVRVideoEncoder::FinishEncoding()
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("UIVRVideoEncoder finished sending video data."));
     return true;
 }
-
 bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, const FString& InMasterOutputPath)
 {
     if (InTakePaths.Num() == 0)
@@ -332,7 +318,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     {
         FileListContent += FString::Printf(TEXT("file '%s'\n"), *TakePath);
     }
-
     if (!FFileHelper::SaveStringToFile(FileListContent, *FileListPath))
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to create filelist.txt for concatenation at: %s"), *FileListPath);
@@ -385,7 +370,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     // Apagar o arquivo temporário
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
     PlatformFile.DeleteFile(*FileListPath);
-
     if (ReturnCode != 0) // FFmpeg retorna 0 para sucesso
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("FFmpeg concatenation failed with return code: %d. Check FFmpeg logs for details."), ReturnCode);
@@ -395,6 +379,7 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     return true;
 }
 
+// --- INÍCIO DA ALTERAÇÃO: ADICIONAR TIMEOUT AO FECHAMENTO DO PROCESSO FFmpeg ---
 void UIVRVideoEncoder::InternalCleanupEncoderResources()
 {
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Cleaning up video encoder internal resources..."));
@@ -418,23 +403,36 @@ void UIVRVideoEncoder::InternalCleanupEncoderResources()
         FFmpegStderrLogReader = nullptr;
     }
     
-    // Espera o processo FFmpeg terminar completamente
+    // Espera o processo FFmpeg terminar completamente, com timeout
     if (FFmpegProcHandle.IsValid())
     {
-        UE_LOG(LogIVRVideoEncoder, Log, TEXT("Waiting for main FFmpeg process to complete..."));
-        FPlatformProcess::WaitForProc(FFmpegProcHandle); 
-        
-        int32 ReturnCode = -1;
-        FPlatformProcess::GetProcReturnCode(FFmpegProcHandle, &ReturnCode); 
-        UE_LOG(LogIVRVideoEncoder, Log, TEXT("Main FFmpeg process finished with code: %d"), ReturnCode);
-        // Força o fechamento do processo FFmpeg se ele ainda estiver rodando (caso não tenha terminado graciosamente)
+        UE_LOG(LogIVRVideoEncoder, Log, TEXT("Waiting for main FFmpeg process to complete (with timeout)..."));
+        const float MaxWaitTimeSeconds = 5.0f; // Tempo máximo de espera: 5 segundos
+        float ElapsedWaitTime = 0.0f;
+        while (FPlatformProcess::IsProcRunning(FFmpegProcHandle) && ElapsedWaitTime < MaxWaitTimeSeconds)
+        {
+            FPlatformProcess::Sleep(0.1f); // Verifica a cada 100ms
+            ElapsedWaitTime += 0.1f;
+        }
+
         if (FPlatformProcess::IsProcRunning(FFmpegProcHandle))
         {
-            UE_LOG(LogIVRVideoEncoder, Warning, TEXT("Main FFmpeg process did not terminate gracefully. Terminating forcefully."));
+            // Se o processo ainda estiver rodando após o timeout, force o encerramento.
+            UE_LOG(LogIVRVideoEncoder, Warning, TEXT("FFmpeg process timed out after %.2f seconds. Terminating forcefully."), MaxWaitTimeSeconds);
             FPlatformProcess::TerminateProc(FFmpegProcHandle);
         }
+        else
+        {
+            UE_LOG(LogIVRVideoEncoder, Log, TEXT("Main FFmpeg process finished gracefully."));
+        }
+
+        int32 ReturnCode = -1;
+        FPlatformProcess::GetProcReturnCode(FFmpegProcHandle, &ReturnCode); 
+        UE_LOG(LogIVRVideoEncoder, Log, TEXT("Main FFmpeg process exited with code: %d"), ReturnCode);
+
         FPlatformProcess::CloseProc(FFmpegProcHandle); // Libera o handle do processo
         FFmpegProcHandle.Reset();
     }
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Video encoder internal resources cleaned up."));
 }
+// --- FIM DA ALTERAÇÃO ---

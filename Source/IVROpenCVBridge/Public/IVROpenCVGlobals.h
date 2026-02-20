@@ -3,8 +3,12 @@
 
 #include "CoreMinimal.h" // Para FVector2D, FVector, FTransform, TArray, etc.
 
-// Adicione aqui DECLARE_LOG_CATEGORY_EXTERN(LogIVROpenCVBridge, Log, All); se precisar de uma categoria de log específica para este módulo
-#include "IVROpenCVBridge.h" // Para o LogCategory do módulo
+// --- INÍCIO DA CORREÇÃO ---
+// É CRÍTICO que a macro IVROPENCVBRIDGE_API esteja definida antes de ser usada.
+// Ela é definida em IVROpenCVBridge.h (que é o header principal do módulo).
+#include "IVROpenCVBridge.h" // Garante que IVROPENCVBRIDGE_API seja definida.
+// --- FIM DA CORREÇÃO ---
+
 
 // Corresponde a FIVR_JustRTPoint
 struct IVROPENCVBRIDGE_API FOCV_NativeJustRTPoint
@@ -16,10 +20,18 @@ struct IVROPENCVBRIDGE_API FOCV_NativeJustRTPoint
     float Angle;
     bool IsQuad;
 
+    // --- INÍCIO DA CORREÇÃO: Construtor deve ser declarado no corpo da struct, não como lista de inicializadores ---
+    // Isso é mais robusto para a interpretação de alguns compiladores e evitar C2365 / C2550
     FOCV_NativeJustRTPoint()
-        : Point2D(FVector2D::ZeroVector), Point3D(FVector::ZeroVector), Direction(FVector::ZeroVector),
-        Size2D(FVector2D::ZeroVector), Angle(0.0f), IsQuad(false) {
+        : Point2D(FVector2D::ZeroVector)
+        , Point3D(FVector::ZeroVector)
+        , Direction(FVector::ZeroVector)
+        , Size2D(FVector2D::ZeroVector)
+        , Angle(0.0f)
+        , IsQuad(false)
+    {
     }
+    // --- FIM DA CORREÇÃO ---
 };
 
 
@@ -49,9 +61,16 @@ struct IVROPENCVBRIDGE_API FOCV_NativeJustRTFrame
     FLinearColor SourceFrameTint;
     FOCV_NativeJustRTFeatures Features; // Usa a struct nativa de features
 
+    // --- INÍCIO DA CORREÇÃO: Construtor deve ser declarado no corpo da struct, não como lista de inicializadores ---
     FOCV_NativeJustRTFrame()
-        : Width(0), Height(0), Timestamp(0.0f), DisplayTint(FLinearColor::White), SourceFrameTint(FLinearColor::White) {
+        : Width(0)
+        , Height(0)
+        , Timestamp(0.0f)
+        , DisplayTint(FLinearColor::White)
+        , SourceFrameTint(FLinearColor::White)
+    {
     }
+    // --- FIM DA CORREÇÃO ---
 };
 
 namespace IVROpenCVBridge
@@ -76,6 +95,4 @@ namespace IVROpenCVBridge
 
     // Funções para listar webcams
     IVROPENCVBRIDGE_API TArray<FString> ListWebcamDevicesNative();
-
-
 } // namespace IVROpenCVBridge

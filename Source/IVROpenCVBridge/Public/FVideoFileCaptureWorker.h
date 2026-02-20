@@ -14,17 +14,15 @@
 #include <atomic> // Necessário para std::atomic
 #include <string> // Inclusão explícita para std::string
 
-// [MANUAL_REF_POINT] Includes do OpenCV
-#if WITH_OPENCV 
-#include "OpenCVHelper.h"
-#include "PreOpenCVHeaders.h" // Abre namespace/desativa avisos
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgproc.hpp>
+#include "IVROpenCVBridge.h"
 
-#include "PostOpenCVHeaders.h" // Fecha namespace/reativa avisos
-#endif
+
+// --- Ocultar tipos OpenCV dos headers públicos ---
+// Não inclui headers de OpenCV aqui.
+namespace cv { class VideoCapture; } // Forward declaration para cv::VideoCapture
+// --- Crie um alias para o tipo de API, se precisar expor no header ---
+using VideoCaptureAPIs = int; // Fallback para int se OpenCV não estiver habilitado no Unreal
 
 /**
  * @brief Worker thread para ler frames de um arquivo de vídeo usando OpenCV.
@@ -49,6 +47,7 @@ public:
      * @brief Destrutor do worker, libera o VideoCapture.
      */
     virtual ~FVideoFileCaptureWorker();
+
     /**
      * @brief Inicializa o worker, tenta abrir o arquivo de vídeo.
      * @return true se o arquivo foi aberto com sucesso, false caso contrário.
@@ -71,16 +70,10 @@ public:
     virtual void Exit() override;
 
 public: 
-    // Membros da classe que precisam ser declarados aqui para a definição local
-    #if WITH_OPENCV
-    cv::VideoCapture VideoCapture; // cv::VideoCapture agora é definido porque os includes estão no escopo global
-    #else
-    void* VideoCapture; // Fallback se OpenCV não estiver habilitado
-    #endif
-
     FThreadSafeCounter ActualFrameWidth;
     FThreadSafeCounter ActualFrameHeight;
     std::atomic<float> ActualVideoFileFPS; // Usando std::atomic para float thread-safe
+
 private:
     TQueue<FIVR_VideoFrame, EQueueMode::Mpsc>& CapturedFrameQueue;
     UIVRFramePool* FramePool;
@@ -88,5 +81,8 @@ private:
     FEvent* NewFrameEvent;
     FString VideoFilePath;
     float DesiredFPS;
-    bool bLoopPlayback;
+    bool bLoopPlayback; // <-- ESTE MEMBRO AGORA ESTÁ DECLARADO ANTES
+    // --- INÍCIO DA ALTERAÇÃO: cv::VideoCapture agora é um ponteiro ---
+    cv::VideoCapture* OpenCVVideoCapture; // Objeto de captura de vídeo do OpenCV, agora ponteiro
+    // --- FIM DA ALTERAÇÃO ---
 };
