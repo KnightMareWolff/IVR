@@ -5,7 +5,6 @@ IVR is a powerful video recording plugin for Unreal Engine that allows you to ca
 
 ## Features
 - High-quality video recording
-- Audio capture and mixing
 - Multiple take management
 - Customizable video settings
 - Cross-platform support
@@ -23,7 +22,7 @@ IVR is a powerful video recording plugin for Unreal Engine that allows you to ca
 4. Call StopRecording() to end capture
 
 ## Requirements
-- Unreal Engine 5.0+
+- Unreal Engine 5.6+
 - Visual Studio 2022 or later
 - Windows 10/11, Linux, or macOS
 
