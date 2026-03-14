@@ -53,6 +53,7 @@ public class IVROpenCVBridge : ModuleRules
             PublicDependencyModuleNames.Add("OpenCVHelper");
             PrivateIncludePaths.AddRange(
                 new string[] {
+                    Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "ThirdParty", "OpenCV" , "include"),
                     Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "OpenCVHelper", "Public")
                 }
             );

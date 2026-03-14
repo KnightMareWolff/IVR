@@ -8,7 +8,6 @@
 #include "Engine/TextureRenderTarget2D.h" // Necessário para UTextureRenderTarget2D
 #include "Engine/Texture2D.h"             // Necessário para UTexture2D
 #include "IVRTypes.generated.h"
-
 // NOVO: Enum para definir o tipo de fonte de frames
 UENUM(BlueprintType)
 enum class EIVRFrameSourceType : uint8 
@@ -36,7 +35,6 @@ struct IVRCORE_API FIVR_VideoSettings
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings")
     FString Codec = TEXT("H264");// Ex: h264, vp9, etc.
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings")
     int32 Bitrate = 5000000; // Em bps (bits por segundo), ex: 5 Mbps
 
@@ -46,7 +44,6 @@ struct IVRCORE_API FIVR_VideoSettings
     // NOVO: Seleção do tipo de fonte de frames
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings")
     EIVRFrameSourceType FrameSourceType = EIVRFrameSourceType::RenderTarget; // Default para captura real
-
     // NOVO: Categoria e flag para JustRTCapture
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|JustRTCapture",
         meta = (DisplayName = "Enable Real-Time Frame Output", ToolTip = "Quando verdadeiro, os frames capturados são disponibilizados em tempo real via delegate, em vez de serem enviados para gravação FFmpeg. Ideal para integração com UI ou manipulação de pixels."))
@@ -55,7 +52,6 @@ struct IVRCORE_API FIVR_VideoSettings
     // NOVO: Ator a ser seguido pela câmera
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Camera Follow")
     class AActor* IVR_FollowActor = nullptr;
-
     // --- Parâmetros para UIVRFolderFrameSource ---
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Folder Frame Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::Folder", EditConditionHides))
@@ -66,7 +62,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Folder Frame Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::Folder", EditConditionHides))
     bool IVR_LoopFolderPlayback = true;
-
     // --- Parâmetros para UIVRRenderFrameSource (Configurações de Câmera Cinemática) ---
     // NOTA: Estas configurações serão aplicadas ao USceneCaptureComponent2D ou a um UCineCameraComponent
     // se o UIVRCaptureComponent estiver anexado a um ator com um CineCameraComponent.
@@ -85,7 +80,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Render Frame Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::RenderTarget", EditConditionHides))
     bool IVR_EnableCinematicPostProcessing = true; // Flag para habilitar ou desabilitar pós-processamento da câmera
-
     // --- Parâmetros para UIVRVideoFrameSource (Arquivo de Vídeo Generalizado) ---
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Video File Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::VideoFile", EditConditionHides))
@@ -96,7 +90,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Video File Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::VideoFile", EditConditionHides))
     bool IVR_LoopVideoPlayback = true;
-
     // --- Parâmetros para UIVRWebcamFrameSource ---
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Webcam Frame Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::Webcam", EditConditionHides))
@@ -107,7 +100,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Webcam Frame Source",
         meta = (EditCondition = "FrameSourceType == EIVRFrameSourceType::Webcam", EditConditionHides))
     float IVR_WebcamFPS = 30.0f;
-
     // Cor de tintura para frames gerados pela fonte (ex: Simulated)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings")
     FLinearColor IVR_FrameTint = FLinearColor::White; 
@@ -120,7 +112,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Feature Extraction",
         meta = (DisplayName = "Enable Debug Draw Features", ToolTip = "Se verdadeiro, desenha caixas de detecção na saída de vídeo em tempo real."))
     bool IVR_DebugDrawFeatures = false;
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Feature Extraction",
         meta = (DisplayName = "Max Corners (goodFeaturesToTrack)", ClampMin = "1", UIMin = "1", ToolTip = "Número máximo de cantos a serem detectados pela goodFeaturesToTrack."))
     int32 IVR_GFTT_MaxCorners = 100;
@@ -132,7 +123,6 @@ struct IVRCORE_API FIVR_VideoSettings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Feature Extraction",
         meta = (DisplayName = "Min Distance (goodFeaturesToTrack)", ClampMin = "1", UIMin = "1", ToolTip = "Distância euclidiana mínima entre os cantos detectados."))
     float IVR_GFTT_MinDistance = 10.0f;
-
     // --- INÍCIO DA ALTERAÇÃO: NOVAS PROPRIEDADES PARA CUSTOMIZAÇÃO DE NOME DE ARQUIVO ---
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video Settings|Output",
               meta = (DisplayName = "Custom Output Folder Name", ToolTip = "Nome de uma subpasta opcional dentro de Project/Saved/Recordings. Deixe vazio para usar a pasta padrão 'Recordings'."))
@@ -165,9 +155,18 @@ struct IVRCORE_API FIVR_JustRTPoint
 
     UPROPERTY(BlueprintReadOnly, Category = "IVR|Features|Point")
     float Angle; // Orientação em graus (para quads/retângulos)
-
     UPROPERTY(BlueprintReadOnly, Category = "IVR|Features|Point")
     bool IsQuad; // True se for quadrado (ou próximo disso), false se for retângulo
+
+    // NOVO: Construtor padrão para inicializar todas as propriedades
+    FIVR_JustRTPoint()
+        : Point2D(FVector2D::ZeroVector)
+        , Point3D(FVector::ZeroVector)
+        , Direction(FVector::ZeroVector)
+        , Size2D(FVector2D::ZeroVector)
+        , Angle(0.0f)
+        , IsQuad(false)
+    {}
 };
 
 // NOVO: Estrutura para encapsular todas as características extraídas
@@ -187,7 +186,6 @@ struct IVRCORE_API FIVR_JustRTFeatures
 
     UPROPERTY(BlueprintReadOnly, Category = "IVR|Features")
     int32 NumOfQuads = 0; // Contagem de quadriláteros detectados
-
     UPROPERTY(BlueprintReadOnly, Category = "IVR|Features")
     int32 NumOfRectangles = 0; // Contagem de retângulos (não-quadrados) detectados
 
@@ -199,6 +197,14 @@ struct IVRCORE_API FIVR_JustRTFeatures
 
     UPROPERTY(BlueprintReadOnly, Category = "IVR|Features")
     TArray<float> HistogramBlue; // Histograma normalizado (0-1) do canal Azul
+
+    // NOVO: Construtor padrão para inicializar todas as propriedades
+    FIVR_JustRTFeatures()
+        : BiggestPointIndex(INDEX_NONE)
+        , SmallerPointIndex(INDEX_NONE)
+        , NumOfQuads(0)
+        , NumOfRectangles(0)
+    {}
 };
 
 
@@ -210,34 +216,43 @@ struct IVRCORE_API FIVR_JustRTFrame
 
     // Referência direta ao RenderTarget interno usado pelo UIVRRenderFrameSource.
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    UTextureRenderTarget2D* RenderTarget;
-
+    UTextureRenderTarget2D* RenderTarget = nullptr; // Inicializado para nullptr
     // UTexture2D dinamicamente atualizada com os pixels do frame.
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    UTexture2D* LiveTexture; 
+    UTexture2D* LiveTexture = nullptr; // Inicializado para nullptr
 
     // Dados brutos de pixel do frame (BGRA).
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
     TArray<uint8> RawDataBuffer; 
 
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    int32 Width;
+    int32 Width = 0;
 
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    int32 Height;
+    int32 Height = 0;
 
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    float Timestamp; // Tempo de captura do frame
+    float Timestamp = 0.0f; // Tempo de captura do frame
 
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output") // Tintura aplicada pelo IVRCaptureComponent
-    FLinearColor DisplayTint;
+    FLinearColor DisplayTint = FLinearColor::White;
 
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output") // Tintura original da fonte (FIVR_VideoSettings)
-    FLinearColor SourceFrameTint;
-
+    FLinearColor SourceFrameTint = FLinearColor::White;
     // NOVO: A estrutura de características aninhada!
     UPROPERTY(BlueprintReadOnly, Category = "JustRTFrame Output")
-    FIVR_JustRTFeatures Features;
+    FIVR_JustRTFeatures Features; // O construtor padrão de FIVR_JustRTFeatures já a inicializará
+
+    // NOVO: Construtor padrão para inicializar todas as propriedades
+    FIVR_JustRTFrame()
+        : RenderTarget(nullptr)
+        , LiveTexture(nullptr)
+        , Width(0)
+        , Height(0)
+        , Timestamp(0.0f)
+        , DisplayTint(FLinearColor::White)
+        , SourceFrameTint(FLinearColor::White)
+    {}
 };
 
 
@@ -262,6 +277,18 @@ struct IVRCORE_API FIVR_TakeInfo
     FString CustomOutputFolderName;
     FString CustomOutputBaseFilename;
     // --- FIM DA ALTERAÇÃO ---
+
+    // NOVO: Construtor padrão para inicializar todas as propriedades
+    FIVR_TakeInfo()
+        : TakeNumber(0)
+        , Duration(0.0f)
+        , StartTime(FDateTime::MinValue())
+        , EndTime(FDateTime::MinValue())
+        , FilePath(TEXT(""))
+        , SessionID(TEXT(""))
+        , CustomOutputFolderName(TEXT(""))
+        , CustomOutputBaseFilename(TEXT(""))
+    {}
 };
 
 USTRUCT(BlueprintType)
@@ -303,7 +330,6 @@ struct IVRCORE_API FIVR_PipeSettings
 
     /** O nome base do pipe. O path completo será construído usando \.\pipe\<BasePipeName> */
     FString BasePipeName = TEXT("UnrealRecordingPipe");
-
     /**
      * Se true, esta instância será o "servidor" do pipe (o criador que aguarda conexões).
      * Se false, esta instância tentará se conectar a um pipe existente (como cliente).
@@ -323,7 +349,6 @@ struct IVRCORE_API FIVR_PipeSettings
      * (Equivale a PIPE_WAIT se true, ou PIPE_NOWAIT se false).
      */
     bool bBlockingMode = true;
-
     /**
      * Se true, o pipe operará em modo de mensagem, onde dados são lidos/escritos como blocos discretos.
      * Se false, o pipe operará em modo de byte, onde dados são lidos/escritos como um fluxo contínuo.
@@ -348,4 +373,16 @@ struct IVRCORE_API FIVR_PipeSettings
      * O Windows pode ajustar este valor.
      */
     int32 InBufferSize = 65536; // 64 KB
+
+    // NOVO: Construtor padrão para inicializar todas as propriedades
+    FIVR_PipeSettings()
+        : BasePipeName(TEXT("UnrealRecordingPipe"))
+        , bIsServerPipe(true)
+        , bDuplexAccess(false)
+        , bBlockingMode(true)
+        , bMessageMode(false)
+        , MaxInstances(-1)
+        , OutBufferSize(65536)
+        , InBufferSize(65536)
+    {}
 };

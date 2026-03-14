@@ -82,7 +82,7 @@ void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
         else if (OnBackBufferReadyToPresentHandle.IsValid())
         {
              // J� bound, talvez devido � re-inicializa��o sem shutdown completo
-             UE_LOG(LogIVRRenderFrameSource, Warning, TEXT("OnBackBufferReadyToPresent delegate already bound. Skipping re-binding."));
+             UE_LOG(LogIVRRenderFrameSource, Log, TEXT("OnBackBufferReadyToPresent delegate already bound. Skipping re-binding."));
         }
     }
     else
@@ -117,7 +117,7 @@ void UIVRRenderFrameSource::Shutdown()
         else
         {
             // Se n�o forem mais v�lidos, apenas logue um aviso e resete o handle
-            UE_LOG(LogIVRRenderFrameSource, Warning, TEXT("Could not unbind OnBackBufferReadyToPresent delegate: FSlateApplication or renderer already shut down."));
+            UE_LOG(LogIVRRenderFrameSource, Log, TEXT("Could not unbind OnBackBufferReadyToPresent delegate: FSlateApplication or renderer already shut down."));
         }
         OnBackBufferReadyToPresentHandle.Reset(); // Sempre resete o handle para evitar uso futuro
         UE_LOG(LogIVRRenderFrameSource, Log, TEXT("OnBackBufferReadyToPresent delegate UNBOUND."));
@@ -199,7 +199,7 @@ void UIVRRenderFrameSource::OnBackBufferReady(SWindow& SlateWindow, const FTextu
 
             NewRenderRequest->RenderFence.BeginFence();
 
-            UE_LOG(LogIVRRenderFrameSource, Warning, TEXT("Render request enqueued. Queue size: %d"), RReqQueueCounter);
+            UE_LOG(LogIVRRenderFrameSource, Log, TEXT("Render request enqueued. Queue size: %d"), RReqQueueCounter);
         });
 }
 
@@ -245,7 +245,7 @@ void UIVRRenderFrameSource::ProcessRenderQueue()
             // Se NewFrame.RawDataPtr.Reset() fez o trabalho, o ref count de AcquiredByteBuffer deve ser 1.
             FramePool->ReleaseFrame(AcquiredByteBuffer); 
 
-            UE_LOG(LogIVRRenderFrameSource, Warning , TEXT("Render frame processed and broadcasted. Remaining queue size: %d"), RReqQueueCounter);
+            UE_LOG(LogIVRRenderFrameSource, Log , TEXT("Render frame processed and broadcasted. Remaining queue size: %d"), RReqQueueCounter);
 
             bCanCaptureNextFrame.Set(1); 
         }

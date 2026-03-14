@@ -223,7 +223,6 @@ void UIVRVideoEncoder::ShutdownEncoder()
 {
     if (!bIsInitialized && !FFmpegProcHandle.IsValid() && !WorkerThread) 
     {
-        UE_LOG(LogIVRVideoEncoder, Warning, TEXT("UIVRVideoEncoder is not initialized or already shut down."));
         return;
     }
 

@@ -17,7 +17,6 @@
 #include "Engine/Texture2D.h" 
 #include "RenderingThread.h"
 #include "Async/Async.h" // Para AsyncTask
-
 // [MANUAL_REF_POINT] Includes do OpenCV foram movidos para IVROpenCVBridge.
 // Incluindo o bridge para chamar as funções OpenCV nativas
 #include "IVROpenCVGlobals.h"
@@ -32,7 +31,6 @@ UIVRCaptureComponent::UIVRCaptureComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     RecordingStartTimeSeconds = 0.0f;
-
     FramePool = CreateDefaultSubobject<UIVRFramePool>(TEXT("IVRFramePool"));
     OwnedVideoCaptureComponent = nullptr; 
     ActualFrameWidth = 0;
@@ -63,7 +61,6 @@ void UIVRCaptureComponent::BeginDestroy()
     }
     Super::BeginDestroy();
 }
-
 void UIVRCaptureComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -84,7 +81,6 @@ void UIVRCaptureComponent::BeginPlay()
         AActor* OwnerActor = GetOwner();
         USceneCaptureComponent2D* ExistingCaptureComp = nullptr;
         UCineCameraComponent* ExistingCineCamComp = nullptr;
-
         if (OwnerActor)
         {
             ExistingCaptureComp = OwnerActor->FindComponentByClass<USceneCaptureComponent2D>();
@@ -170,14 +166,12 @@ void UIVRCaptureComponent::BeginPlay()
         Cast<UIVRFolderFrameSource>(CurrentFrameSource)->Initialize(GetWorld(), VideoSettings, FramePool);
     }
     break;
-
     case EIVRFrameSourceType::VideoFile:
     {
         CurrentFrameSource = NewObject<UIVRVideoFrameSource>(this);
         Cast<UIVRVideoFrameSource>(CurrentFrameSource)->Initialize(GetWorld(), VideoSettings, FramePool);
     }
     break;
-
     case EIVRFrameSourceType::Webcam:
     {
         CurrentFrameSource = NewObject<UIVRWebcamFrameSource>(this);
@@ -360,31 +354,39 @@ void UIVRCaptureComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 }
 void UIVRCaptureComponent::StartRecording()
 {
-    AsyncTask(ENamedThreads::GameThread, [this]()
+    TWeakObjectPtr<UIVRCaptureComponent> WeakThis = this;
+    AsyncTask(ENamedThreads::GameThread, [WeakThis]()
         {
-            if (!bIsRecording)
+            if (!WeakThis.IsValid())
             {
-                bIsRecording = true;
-                CurrentTakeNumber = 0; 
-                RecordingStartTimeSeconds = GetWorld()->GetTimeSeconds();
-                if (CurrentFrameSource)
+                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent::StartRecording: Componente IVRCaptureComponent foi destruído antes que a tarefa assíncrona pudesse ser executada."));
+                return;
+            }
+            UIVRCaptureComponent* StrongThis = WeakThis.Get();
+
+            if (!StrongThis->bIsRecording)
+            {
+                StrongThis->bIsRecording = true;
+                StrongThis->CurrentTakeNumber = 0; 
+                StrongThis->RecordingStartTimeSeconds = StrongThis->GetWorld()->GetTimeSeconds();
+                if (StrongThis->CurrentFrameSource)
                 {
-                    CurrentFrameSource->StartCapture(); 
+                    StrongThis->CurrentFrameSource->StartCapture(); 
                     UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Captura de fonte de frames iniciada."));
-                    if (VideoSettings.FrameSourceType == EIVRFrameSourceType::Folder)
+                    if (StrongThis->VideoSettings.FrameSourceType == EIVRFrameSourceType::Folder)
                     {
-                        VideoSettings.FPS = VideoSettings.IVR_FolderPlaybackFPS;
-                        UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para IVR_FolderPlaybackFPS: %.2f"), VideoSettings.FPS);
+                        StrongThis->VideoSettings.FPS = StrongThis->VideoSettings.IVR_FolderPlaybackFPS;
+                        UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para IVR_FolderPlaybackFPS: %.2f"), StrongThis->VideoSettings.FPS);
                     }
-                    else if (VideoSettings.FrameSourceType == EIVRFrameSourceType::Webcam)
+                    else if (StrongThis->VideoSettings.FrameSourceType == EIVRFrameSourceType::Webcam)
                     {
-                        VideoSettings.FPS = VideoSettings.IVR_WebcamFPS;
-                        UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para IVR_WebcamFPS: %.2f"), VideoSettings.FPS);
+                        StrongThis->VideoSettings.FPS = StrongThis->VideoSettings.IVR_WebcamFPS;
+                        UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para IVR_WebcamFPS: %.2f"), StrongThis->VideoSettings.FPS);
                     }
                     // CORREÇÃO: Usar o valor correto do enum EIVRFrameSourceType::VideoFile
-                    else if (VideoSettings.FrameSourceType == EIVRFrameSourceType::VideoFile) 
+                    else if (StrongThis->VideoSettings.FrameSourceType == EIVRFrameSourceType::VideoFile) 
                     {
-                        UIVRVideoFrameSource* VideoFileSource = Cast<UIVRVideoFrameSource>(CurrentFrameSource);
+                        UIVRVideoFrameSource* VideoFileSource = Cast<UIVRVideoFrameSource>(StrongThis->CurrentFrameSource);
                         if (VideoFileSource)
                         {
                             float effectiveFPS = 0.0f;
@@ -399,110 +401,110 @@ void UIVRCaptureComponent::StartRecording()
                             }
                             if (effectiveFPS > 0.0f)
                             {
-                                VideoSettings.FPS = effectiveFPS;
-                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para FPS efetivo do VideoFile: %.2f"), VideoSettings.FPS);
+                                StrongThis->VideoSettings.FPS = effectiveFPS;
+                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Ajustando FPS da sessão para FPS efetivo do VideoFile: %.2f"), StrongThis->VideoSettings.FPS);
                             }
                             else
                             {
-                                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: Não foi possível determinar o FPS efetivo do VideoFile. Usando VideoSettings.FPS padrão (%.2f) para a entrada do FFmpeg. A velocidade de saída do vídeo pode estar incorreta."), VideoSettings.FPS);
+                                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: Não foi possível determinar o FPS efetivo do VideoFile. Usando VideoSettings.FPS padrão (%.2f) para a entrada do FFmpeg. A velocidade de saída do vídeo pode estar incorreta."), StrongThis->VideoSettings.FPS);
                             }
                         }
                     }
                     
-                    if (UIVRWebcamFrameSource* WebcamSource = Cast<UIVRWebcamFrameSource>(CurrentFrameSource))
+                    if (UIVRWebcamFrameSource* WebcamSource = Cast<UIVRWebcamFrameSource>(StrongThis->CurrentFrameSource))
                     {
                         for (int i = 0; i < 10; ++i) 
                         {
-                            ActualFrameWidth = WebcamSource->GetActualFrameWidth();
-                            ActualFrameHeight = WebcamSource->GetActualFrameHeight();
-                            if (ActualFrameWidth > 0 && ActualFrameHeight > 0)
+                            StrongThis->ActualFrameWidth = WebcamSource->GetActualFrameWidth();
+                            StrongThis->ActualFrameHeight = WebcamSource->GetActualFrameHeight();
+                            if (StrongThis->ActualFrameWidth > 0 && StrongThis->ActualFrameHeight > 0)
                             {
-                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Resolução real da Webcam determinada: %dx%d após %d tentativas."), ActualFrameWidth, ActualFrameHeight, i+1);
+                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Resolução real da Webcam determinada: %dx%d após %d tentativas."), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight, i+1);
                                 break;
                             }
                             FPlatformProcess::Sleep(0.01f);
                         }
-                        if (ActualFrameWidth <= 0 || ActualFrameHeight <= 0)
+                        if (StrongThis->ActualFrameWidth <= 0 || StrongThis->ActualFrameHeight <= 0)
                         {
-                            ActualFrameWidth = VideoSettings.Width;
-                            ActualFrameHeight = VideoSettings.Height;
-                            UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: Webcam reportou resolução inválida (%dx%d) após polling. Usando VideoSettings para gravação."), ActualFrameWidth, ActualFrameHeight);
+                            StrongThis->ActualFrameWidth = StrongThis->VideoSettings.Width;
+                            StrongThis->ActualFrameHeight = StrongThis->VideoSettings.Height;
+                            UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: Webcam reportou resolução inválida (%dx%d) após polling. Usando VideoSettings para gravação."), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight);
                         }
                     }
-                    else if (UIVRVideoFrameSource* VideoFileSource = Cast<UIVRVideoFrameSource>(CurrentFrameSource))
+                    else if (UIVRVideoFrameSource* VideoFileSource = Cast<UIVRVideoFrameSource>(StrongThis->CurrentFrameSource))
                     {
                         for (int i = 0; i < 10; ++i)
                         {
-                            ActualFrameWidth = VideoFileSource->GetActualFrameWidth();
-                            ActualFrameHeight = VideoFileSource->GetActualFrameHeight();
-                            if (ActualFrameWidth > 0 && ActualFrameHeight > 0)
+                            StrongThis->ActualFrameWidth = VideoFileSource->GetActualFrameWidth();
+                            StrongThis->ActualFrameHeight = VideoFileSource->GetActualFrameHeight();
+                            if (StrongThis->ActualFrameWidth > 0 && StrongThis->ActualFrameHeight > 0)
                             {
-                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Resolução real do VideoFile determinada: %dx%d após %d tentativas."), ActualFrameWidth, ActualFrameHeight, i+1);
+                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Resolução real do VideoFile determinada: %dx%d após %d tentativas."), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight, i+1);
                                 break;
                             }
                             FPlatformProcess::Sleep(0.01f);
                         }
-                        if (ActualFrameWidth <= 0 || ActualFrameHeight <= 0)
+                        if (StrongThis->ActualFrameWidth <= 0 || StrongThis->ActualFrameHeight <= 0)
                         {
-                            ActualFrameWidth = VideoSettings.Width;
-                            ActualFrameHeight = VideoSettings.Height;
-                            UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: VideoFileSource reportou resolução inválida (%dx%d) após polling. Usando VideoSettings para gravação."), ActualFrameWidth, ActualFrameHeight);
+                            StrongThis->ActualFrameWidth = StrongThis->VideoSettings.Width;
+                            StrongThis->ActualFrameHeight = StrongThis->VideoSettings.Height;
+                            UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: VideoFileSource reportou resolução inválida (%dx%d) após polling. Usando VideoSettings para gravação."), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight);
                         }
                     }
                     else // Para RenderTarget, Folder, Simulated, use as configurações do VideoSettings diretamente
                     {
-                        ActualFrameWidth = VideoSettings.Width;
-                        ActualFrameHeight = VideoSettings.Height;
+                        StrongThis->ActualFrameWidth = StrongThis->VideoSettings.Width;
+                        StrongThis->ActualFrameHeight = StrongThis->VideoSettings.Height;
                     }
-                    FramePool->Initialize(FramePoolSize, ActualFrameWidth, ActualFrameHeight, true); 
+                    StrongThis->FramePool->Initialize(StrongThis->FramePoolSize, StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight, true); 
                     
-                    if (!VideoSettings.bEnableRTFrames) 
+                    if (!StrongThis->VideoSettings.bEnableRTFrames) 
                     {
-                        StartNewTake(); 
-                        if (!CurrentSession) 
+                        StrongThis->StartNewTake(); 
+                        if (!StrongThis->CurrentSession) 
                         {
                             UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: StartNewTake falhou ao criar sessão de gravação inicial. Abortando."));
-                            bIsRecording = false;
-                            CurrentFrameSource->StopCapture();
+                            StrongThis->bIsRecording = false;
+                            StrongThis->CurrentFrameSource->StopCapture();
                             return;
                         }
                     }
                     else 
                     {
-                        if (!RealTimeOutputTexture2D || RealTimeOutputTexture2D->GetSizeX() != ActualFrameWidth || RealTimeOutputTexture2D->GetSizeY() != ActualFrameHeight)
+                        if (!StrongThis->RealTimeOutputTexture2D || StrongThis->RealTimeOutputTexture2D->GetSizeX() != StrongThis->ActualFrameWidth || StrongThis->RealTimeOutputTexture2D->GetSizeY() != StrongThis->ActualFrameHeight)
                         {
-                            if (RealTimeOutputTexture2D)
+                            if (StrongThis->RealTimeOutputTexture2D)
                             {
-                                RealTimeOutputTexture2D->ReleaseResource(); 
-                                RealTimeOutputTexture2D = nullptr;
+                                StrongThis->RealTimeOutputTexture2D->ReleaseResource(); 
+                                StrongThis->RealTimeOutputTexture2D = nullptr;
                             }
-                            RealTimeOutputTexture2D = UTexture2D::CreateTransient(ActualFrameWidth, ActualFrameHeight, PF_B8G8R8A8); 
-                            if (RealTimeOutputTexture2D)
+                            StrongThis->RealTimeOutputTexture2D = UTexture2D::CreateTransient(StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight, PF_B8G8R8A8); 
+                            if (StrongThis->RealTimeOutputTexture2D)
                             {
-                                RealTimeOutputTexture2D->UpdateResource(); 
-                                RealTimeOutputTexture2D->Filter = TF_Bilinear;
-                                RealTimeOutputTexture2D->CompressionSettings = TC_EditorIcon; 
-                                RealTimeOutputTexture2D->SRGB = true; 
-                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Textura de Saída em Tempo Real criada/recriada: %dx%d."), ActualFrameWidth, ActualFrameHeight);
+                                StrongThis->RealTimeOutputTexture2D->UpdateResource(); 
+                                StrongThis->RealTimeOutputTexture2D->Filter = TF_Bilinear;
+                                StrongThis->RealTimeOutputTexture2D->CompressionSettings = TC_EditorIcon; 
+                                StrongThis->RealTimeOutputTexture2D->SRGB = true; 
+                                UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Textura de Saída em Tempo Real criada/recriada: %dx%d."), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight);
                             }
                             else
                             {
                                 UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: Falha ao criar RealTimeOutputTexture2D. O JustRTCapture não funcionará corretamente."));
-                                bIsRecording = false;
-                                CurrentFrameSource->StopCapture();
+                                StrongThis->bIsRecording = false;
+                                StrongThis->CurrentFrameSource->StopCapture();
                                 return;
                             }
                         }
                         UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: JustRTCapture habilitado. Frames serão enviados via delegate."));
                     }
                     
-                    OnRecordingStarted.Broadcast(); 
-                    UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Gravação/Captura iniciada. Tamanho do Frame Real: %dx%d (usado para FFmpeg e FramePool)"), ActualFrameWidth, ActualFrameHeight);
+                    StrongThis->OnRecordingStarted.Broadcast(); 
+                    UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Gravação/Captura iniciada. Tamanho do Frame Real: %dx%d (usado para FFmpeg e FramePool)"), StrongThis->ActualFrameWidth, StrongThis->ActualFrameHeight);
                 }
                 else 
                 {
                     UE_LOG(LogIVR, Error, TEXT("UIVRCaptureComponent: Não é possível iniciar a gravação, CurrentFrameSource é nulo."));
-                    bIsRecording = false;
+                    StrongThis->bIsRecording = false;
                     return;
                 }
             }
@@ -510,62 +512,85 @@ void UIVRCaptureComponent::StartRecording()
 }
 void UIVRCaptureComponent::StopRecording()
 {
-    AsyncTask(ENamedThreads::GameThread, [this]()
+    TWeakObjectPtr<UIVRCaptureComponent> WeakThis = this;
+    AsyncTask(ENamedThreads::GameThread, [WeakThis]()
         {
-            if (bIsRecording)
+            if (!WeakThis.IsValid())
             {
-                if (!VideoSettings.bEnableRTFrames) 
+                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent::StopRecording: Componente IVRCaptureComponent foi destruído antes que a tarefa assíncrona pudesse ser executada. O cleanup foi ignorado para evitar um crash."));
+                return;
+            }
+            UIVRCaptureComponent* StrongThis = WeakThis.Get();
+
+            if (StrongThis->bIsRecording)
+            {
+                if (!StrongThis->VideoSettings.bEnableRTFrames) 
                 {
-                    EndCurrentTake();
+                    StrongThis->EndCurrentTake();
                     UIVRRecordingManager::Get()->GenerateMasterVideoAndCleanup();
                 }
                 
-                if (CurrentFrameSource)
+                if (StrongThis->CurrentFrameSource)
                 {
-                    CurrentFrameSource->StopCapture();
+                    StrongThis->CurrentFrameSource->StopCapture();
                     UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Captura de fonte de frames parada."));
                 }
                 
-                bIsRecording = false;
-                OnRecordingStopped.Broadcast(); 
+                StrongThis->bIsRecording = false;
+                StrongThis->OnRecordingStopped.Broadcast(); 
                 UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Gravação parada."));
             }
         });
 }
 void UIVRCaptureComponent::PauseTake()
 {
-    AsyncTask(ENamedThreads::GameThread, [this]()
+    TWeakObjectPtr<UIVRCaptureComponent> WeakThis = this;
+    AsyncTask(ENamedThreads::GameThread, [WeakThis]()
         {
-            if (bIsRecording && CurrentSession)
+            if (!WeakThis.IsValid())
             {
-                CurrentSession->PauseRecording();
+                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent::PauseTake: Componente IVRCaptureComponent foi destruído antes que a tarefa assíncrona pudesse ser executada."));
+                return;
+            }
+            UIVRCaptureComponent* StrongThis = WeakThis.Get();
+
+            if (StrongThis->bIsRecording && StrongThis->CurrentSession)
+            {
+                StrongThis->CurrentSession->PauseRecording();
                 
-                if (CurrentFrameSource)
+                if (StrongThis->CurrentFrameSource)
                 {
-                    CurrentFrameSource->StopCapture(); 
+                    StrongThis->CurrentFrameSource->StopCapture(); 
                     UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Fonte de frames pausada."));
                 }
-                OnRecordingPaused.Broadcast(); 
+                StrongThis->OnRecordingPaused.Broadcast(); 
             }
         });
 }
 void UIVRCaptureComponent::ResumeTake()
 {
-    AsyncTask(ENamedThreads::GameThread, [this]()
+    TWeakObjectPtr<UIVRCaptureComponent> WeakThis = this;
+    AsyncTask(ENamedThreads::GameThread, [WeakThis]()
         {
-            if (bIsRecording && CurrentSession)
+            if (!WeakThis.IsValid())
             {
-                CurrentSession->ResumeRecording();
-                if (CurrentFrameSource)
+                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent::ResumeTake: Componente IVRCaptureComponent foi destruído antes que a tarefa assíncrona pudesse ser executada."));
+                return;
+            }
+            UIVRCaptureComponent* StrongThis = WeakThis.Get();
+
+            if (StrongThis->bIsRecording && StrongThis->CurrentSession)
+            {
+                StrongThis->CurrentSession->ResumeRecording();
+                if (StrongThis->CurrentFrameSource)
                 {
-                    CurrentFrameSource->StartCapture();
+                    StrongThis->CurrentFrameSource->StartCapture();
                     UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Fonte de frames resumida."));
                 }
-                OnRecordingResumed.Broadcast(); 
+                StrongThis->OnRecordingResumed.Broadcast(); 
             }
         });
 }
-
 void UIVRCaptureComponent::StartNewTake()
 {
     if (CurrentSession)
@@ -586,7 +611,6 @@ void UIVRCaptureComponent::StartNewTake()
     CurrentTakeNumber++;
     UE_LOG(LogIVR, Log, TEXT("UIVRCaptureComponent: Take %d iniciado."), CurrentTakeNumber);
 }
-
 void UIVRCaptureComponent::EndCurrentTake()
 {
     if (CurrentSession)
@@ -656,7 +680,6 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
             
              // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
             FOCV_NativeJustRTFeatures TempExtractedFeatures;
-
             // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
             IVROpenCVBridge::ProcessFrameAndExtractFeatures(
                 FrameOutput.RawDataBuffer.GetData(), // Passar o ponteiro bruto para os pixels
@@ -670,7 +693,6 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
                 VideoSettings.IVR_DebugDrawFeatures,
                 TempExtractedFeatures // A struct de saída
              );
-
             // Agora copiar os resultados da struct temporária para a FIVR_JustRTFrame original
             // Fazer a conversão de FIVROCV_InterestPoint para FIVR_JustRTPoint
             FrameOutput.Features.JustRTInterestPoints.Empty();
@@ -692,7 +714,7 @@ void UIVRCaptureComponent::OnFrameAcquiredFromSource(FIVR_VideoFrame Frame)
             FrameOutput.Features.HistogramRed = TempExtractedFeatures.HistogramRed;
             FrameOutput.Features.HistogramGreen = TempExtractedFeatures.HistogramGreen;
             FrameOutput.Features.HistogramBlue = TempExtractedFeatures.HistogramBlue;
-
+            this->OnRealTimeFrameReady.Broadcast(FrameOutput); // strongThis was used to replace 'this' in original lambda too.
         }
     }
     else 
@@ -711,7 +733,6 @@ void UIVRCaptureComponent::UpdateTextureFromRawData(UTexture2D* Texture, const T
         UE_LOG(LogIVR, Error, TEXT("UpdateTextureFromRawData: Textura ou recurso RHI inválido na entrada."));
         return;
     }
-
     if (Texture->GetSizeX() != InWidth || Texture->GetSizeY() != InHeight)
     {
         UE_LOG(LogIVR, Error, TEXT("UpdateTextureFromRawData: Dimensões da textura (%dx%d) não correspondem às do frame (%dx%d). Frame descartado."),
@@ -786,7 +807,6 @@ FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVi
         *InSourceVideoPath,
         *OutPreparedVideoPath
     );
-
     UE_LOG(LogIVR, Log, TEXT("PrepareVideoForRecording: Transcodificando vídeo. Executável: %s, Argumentos: %s"), *FFmpegPath, *FFmpegArguments);
     if (!UIVRRecordingManager::Get()->LaunchFFmpegProcessBlocking(FFmpegPath, FFmpegArguments))
     {
@@ -797,7 +817,6 @@ FString UIVRCaptureComponent::PrepareVideoForRecording(const FString& InSourceVi
         }
         return FString();
     }
-
     UE_LOG(LogIVR, Log, TEXT("PrepareVideoForRecording: Vídeo transcodificado com sucesso para: %s"), *OutPreparedVideoPath);
     return OutPreparedVideoPath;
 }
@@ -859,8 +878,7 @@ void UIVRCaptureComponent::ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFr
     {
         // [MANUAL_REF_POINT] A lógica de processamento OpenCV foi movida para IVROpenCVBridge::ProcessFrameAndExtractFeatures.
         // Chame a função apropriada do IVROpenCVBridge aqui, passando os parâmetros necessários.
-        //IVROpenCVBridge::ProcessFrameAndExtractFeatures(InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures);
-        // Chamar a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
+        // Chame a função do bridge com os parâmetros brutos. FramePoolInstance foi removido!
         // Criar uma instância da struct de features do IVROpenCVBridge para receber os resultados
         FOCV_NativeJustRTFeatures TempExtractedFeatures;
         IVROpenCVBridge::ProcessFrameAndExtractFeatures(
@@ -875,20 +893,27 @@ void UIVRCaptureComponent::ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFr
                 VideoSettings.IVR_DebugDrawFeatures,
                 TempExtractedFeatures // A struct de saída
              );
-
-        AsyncTask(ENamedThreads::GameThread, [TempExtractedFeatures,InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures, this]() mutable
+        TWeakObjectPtr<UIVRCaptureComponent> WeakThis = this;
+        AsyncTask(ENamedThreads::GameThread, [TempExtractedFeatures,InOutFrame, CameraTransform, CameraFOV, FramePoolInstance, MaxCorners, QualityLevel, MinDistance, bDebugDrawFeatures, WeakThis]() mutable
         {
-            if (RealTimeOutputTexture2D && InOutFrame.RawDataBuffer.Num() > 0)
+            if (!WeakThis.IsValid())
             {
-                UpdateTextureFromRawData(RealTimeOutputTexture2D, InOutFrame.RawDataBuffer, InOutFrame.Width, InOutFrame.Height);
+                UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent::ProcessFrameAndFeaturesAsync: Componente IVRCaptureComponent foi destruído antes que a tarefa assíncrona de processamento de features pudesse ser executada."));
+                return;
+            }
+            UIVRCaptureComponent* StrongThis = WeakThis.Get();
+
+            if (StrongThis->RealTimeOutputTexture2D && InOutFrame.RawDataBuffer.Num() > 0)
+            {
+                StrongThis->UpdateTextureFromRawData(StrongThis->RealTimeOutputTexture2D, InOutFrame.RawDataBuffer, InOutFrame.Width, InOutFrame.Height);
             }
             else
             {
                 UE_LOG(LogIVR, Warning, TEXT("UIVRCaptureComponent: RealTimeOutputTexture2D ou RawDataBuffer inválido para saída RT APÓS processamento de features."));
             }
-            if (OnRealTimeFrameReady.IsBound())
+            if (StrongThis->OnRealTimeFrameReady.IsBound())
             {
-                OnRealTimeFrameReady.Broadcast(InOutFrame);
+                StrongThis->OnRealTimeFrameReady.Broadcast(InOutFrame);
             }
         });
     });
@@ -903,7 +928,6 @@ void UIVRCaptureComponent::DeprojectPixelToWorld(
 {
     const float FOVRad = FMath::DegreesToRadians(FOVDegrees);
     const float AspectRatio = (float)ImageResolution.X / ImageResolution.Y;
-
     float NDC_X = (PixelPos.X / ImageResolution.X) * 2.0f - 1.0f;
     float NDC_Y = (1.0f - (PixelPos.Y / ImageResolution.Y)) * 2.0f - 1.0f;
     float ViewX = NDC_X * FMath::Tan(FOVRad * 0.5f) * AspectRatio;

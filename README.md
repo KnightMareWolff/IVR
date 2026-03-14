@@ -1,45 +1,31 @@
+# IVR - Insane Video Recorder Plugin for Unreal Engine
 
+## Overview
+IVR is a powerful video recording plugin for Unreal Engine that allows you to capture gameplay footage with advanced features.
 
-# IVR - Insane Video Recorder: Capture the Unimaginable in Real-Time!
+## Features
+- High-quality video recording
+- Audio capture and mixing
+- Multiple take management
+- Customizable video settings
+- Cross-platform support
 
-**IVR (Insane Video Recorder)** is your new essential tool for transforming your Unreal Engine creations into high-quality videos instantly. Forget the barriers of complex interfaces and long rendering waits. IVR was developed to keep pace with the era of virtual production, where agility and the ability to capture what you see in real-time are crucial.
+## Installation
+1. Copy the IVR folder to your project''s Plugins directory
+2. Regenerate project files
+3. Compile the project
+4. Enable the plugin in the Unreal Editor
 
-With IVR, you have the power to "record" your ideas as they happen, optimizing your workflow and boosting creativity. Whether for games, architectural visualizations, or interactive art, IVR simplifies video generation, bringing innovation within your reach.
+## Usage
+1. Add an IVRCaptureComponent to any actor
+2. Configure video and audio settings
+3. Call StartRecording() to begin capture
+4. Call StopRecording() to end capture
 
-## New Features: Flexibility and Total Control
-
-IVR offers an impressive range of video sources and features that adapt to every need of your production:
-
-### Capture Directly from Your Unreal Scene
-Transform any camera angle in Unreal into a video. IVR records exactly what you see, with all the lights, effects, and details of your scene, as if you were filming inside the engine itself.
-
-### Diverse Video Sources
-*   **Rapid Simulation**: Generate instant test videos to prototype ideas, test your project’s performance, or visualize concepts without complications.
-*   **Image Folders**: Easily convert image sequences (like photos taken with your phone or renders from other software) into dynamic videos, with options to control speed and create loops.
-*   **Existing Video Files**: Use videos you already own as a source, playing them back and recording them in real-time with speed and loop control.
-*   **Integrated Webcam**: Take your live streams or augmented reality projects to the next level by incorporating your webcam feed directly into your Unreal production.
-
-### Flexible and Intelligent Recording
-*   **Total Control**: Start, pause, resume, and stop your recordings with complete freedom, whether during development or project execution.
-*   **Optimization and Compatibility**: Prepare your videos for different uses, exporting them in ideal formats for sharing or for integration with other tools.
-
-### Robust and Reliable Performance
-*   **User-Friendly Diagnostics**: Clear and detailed messages help you understand what’s happening and quickly resolve any technical challenges.
-*   IVR operates efficiently, transferring data at high speed and managing memory intelligently, ensuring your Unreal project remains lightweight and responsive while you record.
-
-## The New Technology: JustRT – Pure Real-Time Reality
-
-**JustRT** is a game-changer for anyone seeking real-time interactivity and visual control. It’s not just about recording; it’s about experiencing video as a live and malleable data stream.
-
-With JustRT, your video frames are delivered to you the moment they are captured, directly to your interface or for custom logic. This means you can:
-
-*   **Create Dynamic Screens and Displays**: Feed real-time textures for monitoring screens, control panels, or interactive displays within your Unreal project.
-*   **Develop Reactive Visual Effects**: Use the real-time video stream to trigger events, create visual feedback, or manipulate pixels for innovative artistic effects.
-*   **Prototype AI Interfaces and Logic**: Test systems that react to live video inputs, without the need for pre-renders or offline processing.
-*   **Feed Machine Learning Algorithms**: Integrate the video stream for AI systems, such as Unreal’s new Learning Agents, allowing your algorithms to "see" and learn in real-time.
-
-JustRT transforms video from a recorded final product into an active, evolving component, opening doors to a new generation of interactive experiences and truly dynamic virtual productions.
+## Requirements
+- Unreal Engine 5.0+
+- Visual Studio 2022 or later
+- Windows 10/11, Linux, or macOS
 
 ## License
 Copyright (c) 2025 IVR Team. All rights reserved.
-
