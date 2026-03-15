@@ -82,7 +82,11 @@ private:
     FString VideoFilePath;
     float DesiredFPS;
     bool bLoopPlayback; // <-- ESTE MEMBRO AGORA ESTÁ DECLARADO ANTES
-    // --- INÍCIO DA ALTERAÇÃO: cv::VideoCapture agora é um ponteiro ---
+    
+#if WITH_OPENCV // <--- Adicione este ifdef
     cv::VideoCapture* OpenCVVideoCapture; // Objeto de captura de vídeo do OpenCV, agora ponteiro
-    // --- FIM DA ALTERAÇÃO ---
+#else
+    // Mock ou nullptr para plataformas sem OpenCV
+    void* OpenCVVideoCapture = nullptr; // Apenas para que o código compile, será sempre nullptr
+#endif // WITH_OPENCV
 };

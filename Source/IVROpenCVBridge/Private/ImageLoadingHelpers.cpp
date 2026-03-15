@@ -8,11 +8,16 @@
 #include "IImageWrapperModule.h"
 
 // Outros includes do OpenCV para a lógica de LoadAndResizeImage
+#if WITH_OPENCV 
 #include "OpenCVHelper.h"
-#include "PreOpenCVHeaders.h" 
+#include "PreOpenCVHeaders.h"
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
+
 #include "PostOpenCVHeaders.h" 
+#endif
+
 
 namespace IVROpenCVBridge
 {

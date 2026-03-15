@@ -47,16 +47,22 @@ public class IVROpenCVBridge : ModuleRules
         // --- FIM DA CORREÇÃO ---
 
         // Dependências do OpenCV (da Epic Games)
-        if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Mac) || (Target.Platform == UnrealTargetPlatform.Linux))
+        if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Linux))
         {
             PublicDependencyModuleNames.Add("OpenCV");
             PublicDependencyModuleNames.Add("OpenCVHelper");
-            PrivateIncludePaths.AddRange(
+            PublicIncludePaths.AddRange(
                 new string[] {
                     Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "ThirdParty", "OpenCV" , "include"),
                     Path.Combine(EngineDirectory, "Plugins", "Runtime", "OpenCV", "Source", "OpenCVHelper", "Public")
                 }
             );
+        }
+        else // Para Mac ou outras plataformas não suportadas pelo OpenCV da Epic
+        {
+            // Certifique-se de que não estamos adicionando caminhos de include inexistentes
+            // E que o código que usa OpenCV será condicionalmente compilado.
+            // A definição WITH_OPENCV=0 já virá do OpenCV.Build.cs
         }
 
         // Desativa Unity Builds.

@@ -6,6 +6,7 @@
 #include "IVROpenCVBridge.h" // Para LogCategory do módulo IVROpenCVBridge
 
 // Includes do OpenCV
+#if WITH_OPENCV 
 #include "OpenCVHelper.h"
 #include "PreOpenCVHeaders.h" 
 
@@ -13,11 +14,16 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp> 
 
-#include "PostOpenCVHeaders.h" 
+#include "PostOpenCVHeaders.h"
+#endif
+
 
 
 namespace IVROpenCVBridge
 {
+
+#if WITH_OPENCV 
+
     void ProcessFrameAndExtractFeatures(
         uint8* PixelData,
         int32 Width,
@@ -216,7 +222,28 @@ namespace IVROpenCVBridge
         }
         return Devices;
     }
-
+#else // WITH_OPENCV == 0
+    // Forneça implementações de fallback para plataformas sem OpenCV
+    void ProcessFrameAndExtractFeatures( /* ... */ )
+    {
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. ProcessFrameAndExtractFeatures is a no-op."));
+        // Inicialize OutFeatures com valores padrão para evitar lixo.
+        OutFeatures = FOCV_NativeJustRTFeatures();
+    }
     
+    bool LoadAndResizeImage(const FString& FilePath, int32 TargetWidth, int32 TargetHeight, TArray<uint8>& OutRawData)
+    {
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. LoadAndResizeImage will fail."));
+        return false;
+    }
+
+    TArray<FString> ListWebcamDevicesNative()
+    {
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. ListWebcamDevicesNative returns empty."));
+        TArray<FString> Devices;
+        Devices.Add(TEXT("OpenCV not enabled."));
+        return Devices;
+    }
+#endif // WITH_OPENCV
 
 } // namespace IVROpenCVBridge
