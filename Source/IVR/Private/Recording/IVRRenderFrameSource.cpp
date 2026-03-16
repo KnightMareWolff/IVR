@@ -18,21 +18,19 @@ UIVRRenderFrameSource::UIVRRenderFrameSource()
 {
     bCanCaptureNextFrame.Set(1); // Inicializa como 1 (Unlocked), pronto para capturar
 }
-
 void UIVRRenderFrameSource::BeginDestroy()
 {
-    Shutdown(); // Garante que a fonte seja desligada ao ser destru�da
+    Shutdown(); // Garante que a fonte seja desligada ao ser destruída
     UIVRFrameSource::BeginDestroy(); // Chama o BeginDestroy da classe base
 }
 
-// Implementa��o b�sica de Initialize (para casos onde o CaptureComponent n�o � passado)
+// Implementação básica de Initialize (para casos onde o CaptureComponent não é passado)
 void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& Settings, UIVRFramePool* InFramePool)
 {
-    // Este overload agora sempre chamar� o overload principal com um nullptr para VideoCaptureComponent.
-    // A responsabilidade de fornecer um componente � unicamente do chamador (UIVRCaptureComponent).
+    // Este overload agora sempre chamará o overload principal com um nullptr para VideoCaptureComponent.
+    // A responsabilidade de fornecer um componente é unicamente do chamador (UIVRCaptureComponent).
     Initialize(World, Settings, InFramePool, nullptr);
 }
-
 // Overload de Initialize que aceita um USceneCaptureComponent2D existente
 void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& Settings, UIVRFramePool* InFramePool, USceneCaptureComponent2D* InVideoCaptureComponent)
 {
@@ -44,8 +42,7 @@ void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
     CurrentWorld = World;
     FrameSourceSettings = Settings;
     FramePool = InFramePool;
-
-    // Inicializa��o do RenderTarget
+// Inicialização do RenderTarget
     if (!VideoRenderTarget)
     {
         VideoRenderTarget = NewObject<UTextureRenderTarget2D>(this);
@@ -53,7 +50,7 @@ void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
         {
             VideoRenderTarget->ClearColor = FLinearColor::Black;
             VideoRenderTarget->TargetGamma = 1.5f;
-            VideoRenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8; // RGBA8 � RGBA
+            VideoRenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8; // RGBA8 é RGBA
             VideoRenderTarget->InitAutoFormat(FrameSourceSettings.Width, FrameSourceSettings.Height);
             VideoRenderTarget->bGPUSharedFlag = true;
             VideoRenderTarget->UpdateResourceImmediate(true);
@@ -64,10 +61,9 @@ void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
         VideoRenderTarget->ResizeTarget(FrameSourceSettings.Width, FrameSourceSettings.Height);
         VideoRenderTarget->UpdateResourceImmediate(true);
     }
-
-    // Gerencia o VideoCaptureComponent: AGORA APENAS USA O QUE FOI PASSADO
+// Gerencia o VideoCaptureComponent: AGORA APENAS USA O QUE FOI PASSADO
     // A responsabilidade de criar e gerenciar o ciclo de vida do USceneCaptureComponent2D
-    // � do UIVRCaptureComponent ou do usu�rio que o anexa.
+    // é do UIVRCaptureComponent ou do usuário que o anexa.
     if (InVideoCaptureComponent)
     {
         VideoCaptureComponent = InVideoCaptureComponent;
@@ -81,26 +77,24 @@ void UIVRRenderFrameSource::Initialize(UWorld* World, const FIVR_VideoSettings& 
         }
         else if (OnBackBufferReadyToPresentHandle.IsValid())
         {
-             // J� bound, talvez devido � re-inicializa��o sem shutdown completo
+             // Já bound, talvez devido à re-inicialização sem shutdown completo
              UE_LOG(LogIVRRenderFrameSource, Log, TEXT("OnBackBufferReadyToPresent delegate already bound. Skipping re-binding."));
         }
     }
     else
     {
-        // Se nenhum componente de captura foi fornecido, loga um erro e n�o tenta capturar.
+        // Se nenhum componente de captura foi fornecido, loga um erro e não tenta capturar.
         VideoCaptureComponent = nullptr;
         UE_LOG(LogIVRRenderFrameSource, Error, TEXT("UIVRRenderFrameSource: No valid USceneCaptureComponent2D provided. Frame capture will not work."));
     }
     UE_LOG(LogIVRRenderFrameSource, Log, TEXT("UIVRRenderFrameSource initialized."));
 }
-
 void UIVRRenderFrameSource::Shutdown()
 {
     StopCapture(); // Para a captura antes de desligar
 
-    // N�o destru�mos VideoCaptureComponent aqui, pois ele � de propriedade externa (UIVRCaptureComponent)
-    VideoCaptureComponent = nullptr; // Apenas limpa nossa refer�ncia
-
+    // Não destruímos VideoCaptureComponent aqui, pois ele é de propriedade externa (UIVRCaptureComponent)
+    VideoCaptureComponent = nullptr; // Apenas limpa nossa referência
     if (VideoRenderTarget)
     {
         VideoRenderTarget->ReleaseResource();
@@ -108,7 +102,7 @@ void UIVRRenderFrameSource::Shutdown()
     }
     if (OnBackBufferReadyToPresentHandle.IsValid())
     {
-        // Verifique se o FSlateApplication e o Renderer ainda s�o v�lidos
+        // Verifique se o FSlateApplication e o Renderer ainda são válidos
         if (FSlateApplication::IsInitialized() && FSlateApplication::Get().GetRenderer())
         {
             FSlateApplication::Get().GetRenderer()->OnBackBufferReadyToPresent().Remove(OnBackBufferReadyToPresentHandle);
@@ -116,7 +110,7 @@ void UIVRRenderFrameSource::Shutdown()
         }
         else
         {
-            // Se n�o forem mais v�lidos, apenas logue um aviso e resete o handle
+            // Se não forem mais válidos, apenas logue um aviso e resete o handle
             UE_LOG(LogIVRRenderFrameSource, Log, TEXT("Could not unbind OnBackBufferReadyToPresent delegate: FSlateApplication or renderer already shut down."));
         }
         OnBackBufferReadyToPresentHandle.Reset(); // Sempre resete o handle para evitar uso futuro
@@ -128,9 +122,8 @@ void UIVRRenderFrameSource::Shutdown()
     while(RenderRequestQueue.Dequeue(DummyRequest))
     {
         RReqQueueCounter--;
-        // Buffers ser�o liberados quando o TSharedPtr sair de escopo
+        // Buffers serão liberados quando o TSharedPtr sair de escopo
     }
-
     CurrentWorld = nullptr;
     FramePool = nullptr;
     UE_LOG(LogIVRRenderFrameSource, Log, TEXT("UIVRRenderFrameSource Shutdown."));
@@ -139,7 +132,7 @@ void UIVRRenderFrameSource::Shutdown()
 void UIVRRenderFrameSource::StartCapture()
 {
     UE_LOG(LogIVRRenderFrameSource, Log, TEXT("UIVRRenderFrameSource: Starting capture."));
-    bCanCaptureNextFrame.Set(1); // Libera para come�ar a capturar frames
+    bCanCaptureNextFrame.Set(1); // Libera para começar a capturar frames
 }
 
 void UIVRRenderFrameSource::StopCapture()
@@ -148,22 +141,42 @@ void UIVRRenderFrameSource::StopCapture()
     bCanCaptureNextFrame.Set(0); // Bloqueia a captura de frames
 }
 
-// Esta fun��o � chamada na Render Thread
+// Esta função é chamada na Render Thread
 void UIVRRenderFrameSource::OnBackBufferReady(SWindow& SlateWindow, const FTextureRHIRef& BackBuffer)
 {
     if (!IsInRenderingThread()) return; 
 
-    AsyncTask(ENamedThreads::GameThread, [this]()
+    // --- CORREÇÃO: Usar TWeakObjectPtr para segurança de ciclo de vida do UObject ---
+    TWeakObjectPtr<UIVRRenderFrameSource> WeakThis = this;
+
+    AsyncTask(ENamedThreads::GameThread, [WeakThis]() // Captura WeakThis
         {
-            if (bCanCaptureNextFrame.GetValue() == 0 || !VideoRenderTarget || !VideoRenderTarget->GetResource())
+            // Primeiro, verificar se o objeto UIVRRenderFrameSource ainda é válido
+            if (!WeakThis.IsValid())
+            {
+                // O objeto foi destruído antes da tarefa ser executada. Sair com segurança.
+                return;
+            }
+            UIVRRenderFrameSource* StrongThis = WeakThis.Get(); // Obter ponteiro forte
+
+            // Verificar se a captura está bloqueada
+            if (StrongThis->bCanCaptureNextFrame.GetValue() == 0) 
             {
                 return;
             }
 
-            bCanCaptureNextFrame.Set(0);
+            // Verificar a validade do RenderTarget e seu recurso antes de usar
+            if (!StrongThis->VideoRenderTarget || !StrongThis->VideoRenderTarget->GetResource())
+            {
+                // UE_LOG(LogIVRRenderFrameSource, Warning, TEXT("UIVRRenderFrameSource::OnBackBufferReady: VideoRenderTarget ou seu recurso é inválido. Não é possível capturar frame."));
+                return;
+            }
+
+            // Se chegamos aqui, podemos capturar e os recursos são válidos.
+            StrongThis->bCanCaptureNextFrame.Set(0); // Bloquear para a próxima captura
 
             TSharedPtr<TArray<FColor>> AcquiredColorBuffer = MakeShared<TArray<FColor>>();
-            AcquiredColorBuffer->SetNumUninitialized(FrameSourceSettings.Width * FrameSourceSettings.Height);
+            AcquiredColorBuffer->SetNumUninitialized(StrongThis->FrameSourceSettings.Width * StrongThis->FrameSourceSettings.Height);
             TSharedPtr<FRenderRequestInternal> NewRenderRequest = MakeShared<FRenderRequestInternal>();
             NewRenderRequest->ImageBuffer = AcquiredColorBuffer; 
 
@@ -176,12 +189,11 @@ void UIVRRenderFrameSource::OnBackBufferReady(SWindow& SlateWindow, const FTextu
             };
 
             FReadSurfaceContext ReadSurfaceContext = {
-                VideoRenderTarget->GetResource()->GetTexture2DRHI(),
+                StrongThis->VideoRenderTarget->GetResource()->GetTexture2DRHI(),
                 NewRenderRequest->ImageBuffer.Get(), 
-                FIntRect(0, 0, FrameSourceSettings.Width, FrameSourceSettings.Height),
+                FIntRect(0, 0, StrongThis->FrameSourceSettings.Width, StrongThis->FrameSourceSettings.Height),
                 FReadSurfaceDataFlags(RCM_UNorm, CubeFace_MAX)
             };
-
             ENQUEUE_RENDER_COMMAND(ReadRenderTargetCommand)(
                 [ReadSurfaceContext, NewRenderRequest](FRHICommandListImmediate& RHICmdList)
                 {
@@ -192,22 +204,21 @@ void UIVRRenderFrameSource::OnBackBufferReady(SWindow& SlateWindow, const FTextu
                         ReadSurfaceContext.Flags
                     );
                 }
-                );
+            );
 
-            RenderRequestQueue.Enqueue(NewRenderRequest);
-            RReqQueueCounter++;
+            StrongThis->RenderRequestQueue.Enqueue(NewRenderRequest);
+            StrongThis->RReqQueueCounter++;
 
             NewRenderRequest->RenderFence.BeginFence();
 
-            UE_LOG(LogIVRRenderFrameSource, Log, TEXT("Render request enqueued. Queue size: %d"), RReqQueueCounter);
+            UE_LOG(LogIVRRenderFrameSource, Log, TEXT("Render request enqueued. Queue size: %d"), StrongThis->RReqQueueCounter);
         });
 }
 
-// Esta fun��o deve ser chamada na Game Thread (ex: do TickComponent do IVRCaptureComponent)
+// Esta função deve ser chamada na Game Thread (ex: do TickComponent do IVRCaptureComponent)
 void UIVRRenderFrameSource::ProcessRenderQueue()
 {
     if (!CurrentWorld || !FramePool) return;
-
     TSharedPtr<FRenderRequestInternal> CurrentRequest;
     if (RenderRequestQueue.Peek(CurrentRequest)) 
     {
@@ -216,7 +227,7 @@ void UIVRRenderFrameSource::ProcessRenderQueue()
             RenderRequestQueue.Dequeue(CurrentRequest); 
             RReqQueueCounter--;
 
-            // Adquire o buffer do pool - Este � o TSharedPtr que gerenciaremos.
+            // Adquire o buffer do pool - Este é o TSharedPtr que gerenciaremos.
             TSharedPtr<TArray<uint8>> AcquiredByteBuffer = AcquireFrameBufferFromPool();
             if (!AcquiredByteBuffer.IsValid())
             {
@@ -227,18 +238,17 @@ void UIVRRenderFrameSource::ProcessRenderQueue()
 
             ConvertRgbaToBgraAndCopyToBuffer(*CurrentRequest->ImageBuffer, *AcquiredByteBuffer);
 
-            // Cria o FIVR_VideoFrame. Ele agora cont�m uma c�pia do TSharedPtr AcquiredByteBuffer.
+            // Cria o FIVR_VideoFrame. Ele agora contém uma cópia do TSharedPtr AcquiredByteBuffer.
             FIVR_VideoFrame NewFrame(FrameSourceSettings.Width, FrameSourceSettings.Height, CurrentWorld->GetTimeSeconds());
             NewFrame.RawDataPtr = AcquiredByteBuffer; 
 
-            // Faz o broadcast. Isso cria uma C�PIA do TSharedPtr RawDataPtr para o delegate.
+            // Faz o broadcast. Isso cria uma CÓPIA do TSharedPtr RawDataPtr para o delegate.
             // A TSharedPtr original (AcquiredByteBuffer) e a TSharedPtr dentro de NewFrame.RawDataPtr
-            // mant�m suas refer�ncias fortes.
-            OnFrameAcquired.Broadcast(NewFrame); 
-
-            // IMPORTANTE: Agora, NewFrame.RawDataPtr precisa liberar sua refer�ncia forte.
+            // mantêm suas referências fortes.
+            OnFrameAcquired.Broadcast(NewFrame);
+            // IMPORTANTE: Agora, NewFrame.RawDataPtr precisa liberar sua referência forte.
             // Isso garante que quando AcquiredByteBuffer for devolvido ao pool,
-            // ele ser� a �nica refer�ncia forte restante (assumindo que o delegate n�o est� retendo-o de forma inesperada).
+            // ele será a única referência forte restante (assumindo que o delegate não está retendo-o de forma inesperada).
             NewFrame.RawDataPtr.Reset(); // Isso decrementa o ref count da TArray<uint8>
 
             // Agora, devolva o TSharedPtr original (AcquiredByteBuffer) ao pool.
@@ -267,4 +277,3 @@ void UIVRRenderFrameSource::ConvertRgbaToBgraAndCopyToBuffer(const TArray<FColor
         OutBuffer[i * 4 + 3] = Color.A; 
     }
 }
-
