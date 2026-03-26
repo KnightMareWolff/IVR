@@ -1,4 +1,7 @@
-﻿using UnrealBuildTool;
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
+// Proibited copy or distribution without expressed authorization of the Author.
+using UnrealBuildTool;
 using System.IO;
 
 public class IVROpenCVBridge : ModuleRules
@@ -46,9 +49,12 @@ public class IVROpenCVBridge : ModuleRules
         );
         // --- FIM DA CORREÇÃO ---
 
+        // --- INÍCIO DA CORREÇÃO: Definir explicitamente WITH_OPENCV ---
+        bool bWithOpenCV = false;
         // Dependências do OpenCV (da Epic Games)
         if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Linux))
         {
+            bWithOpenCV = true; // Habilita OpenCV para plataformas suportadas
             PublicDependencyModuleNames.Add("OpenCV");
             PublicDependencyModuleNames.Add("OpenCVHelper");
             PublicIncludePaths.AddRange(
@@ -58,12 +64,10 @@ public class IVROpenCVBridge : ModuleRules
                 }
             );
         }
-        else // Para Mac ou outras plataformas não suportadas pelo OpenCV da Epic
-        {
-            // Certifique-se de que não estamos adicionando caminhos de include inexistentes
-            // E que o código que usa OpenCV será condicionalmente compilado.
-            // A definição WITH_OPENCV=0 já virá do OpenCV.Build.cs
-        }
+        // Adiciona a definição global de WITH_OPENCV com base na verificação
+        PublicDefinitions.Add("WITH_OPENCV=" + (bWithOpenCV ? "1" : "0"));
+        // --- FIM DA CORREÇÃO ---
+
 
         // Desativa Unity Builds.
         bUseUnity = false; // OK.

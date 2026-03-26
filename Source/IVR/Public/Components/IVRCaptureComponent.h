@@ -60,7 +60,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Takes")
     float TakeDuration = 5.0f;
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Takes")
     bool bAutoStartNewTake = true;
     /**
@@ -96,7 +95,6 @@ public:
     // Delegates para notificação de estados da gravação (Proposta 02)
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStarted OnRecordingStarted;
-
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingPaused OnRecordingPaused;
 
@@ -105,15 +103,21 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStopped OnRecordingStopped;
-
     // Delegate para notificar que um frame em tempo real está pronto para coleta
     UPROPERTY(BlueprintAssignable, Category = "IVR|JustRTCapture Events")
     FOnRealTimeFrameReady OnRealTimeFrameReady;
     // Cor de tintura para o modo de captura em tempo real (JustRTCapture)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video|JustRTCapture",
-        meta = (EditCondition = "bEnableRTFrames", EditConditionHides, DisplayName = "Real-Time Display Tint"))
+        meta = (DisplayName = "Real-Time Display Tint"))
     FLinearColor RTDisplayTint = FLinearColor::White; 
     
+    /**
+     * @brief Reinicializa a fonte de frames e reaplica as configurações de vídeo.
+     *         Deve ser chamado após alterar as 'VideoSettings' em runtime para que elas sejam aplicadas.
+     */
+    UFUNCTION(BlueprintCallable, Category = "IVR|Video")
+    void RefreshFrameSourceAndApplySettings();
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -152,22 +156,27 @@ private:
     void OnFrameAcquiredFromSource(FIVR_VideoFrame Frame);
     
     UPROPERTY(Transient)
-    UTexture2D* RealTimeOutputTexture2D; 
-
+    UTexture2D* RealTimeOutputTexture2D;
     void UpdateTextureFromRawData(UTexture2D* Texture, const TArray<uint8>& RawData, int32 InWidth, int32 InHeight);
+    
+    /**
+     * @brief Inicializa ou reinicializa a fonte de frames baseada nas 'VideoSettings' atuais.
+     *         Esta é uma função auxiliar interna que pode ser chamada por BeginPlay ou RefreshFrameSourceAndApplySettings.
+     */
+    void Internal_InitializeFrameSource();
+
     /**
      * @brief Processa a FIVR_JustRTFrame em uma thread de segundo plano para extrair features e deprojetá-las para 3D.
      * O resultado é adicionado de volta à FIVR_JustRTFrame antes de ser transmitido via delegate.
      * @param InOutFrame A estrutura FIVR_JustRTFrame a ser preenchida com as features. Passada por valor (cópia).
      * @param CameraTransform A transformação da câmera de captura usada para a deprojeção 3D.
      * @param CameraFOV O Campo de Visão da câmera de captura.
-     * @param FramePoolInstance O pool de frames para liberação de buffers se necessário.
      * @param MaxCorners O número máximo de cantos para a goodFeaturesToTrack.
-     * @param QualityLevel O nível de qualidade para a goodFeaturesToTrack.
+     * @param QualityLevel O nível de qualidade para cantos, como uma fração da maior resposta de canto.
      * @param MinDistance A distância mínima entre cantos para a goodFeaturesToTrack.
      * @param bDebugDrawFeatures Se verdadeiro, desenha as detecções na imagem.
      */
-    void ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFrame, FTransform CameraTransform, float CameraFOV, UIVRFramePool* FramePoolInstance, int32 MaxCorners, float QualityLevel, float MinDistance, bool bDebugDrawFeatures);
+    void ProcessFrameAndFeaturesAsync(FIVR_JustRTFrame InOutFrame, FTransform CameraTransform, float CameraFOV, int32 MaxCorners, float QualityLevel, float MinDistance, bool bDebugDrawFeatures);
     
     /**
      * @brief Função auxiliar para realizar a deprojeção de um ponto 2D do frame para o mundo 3D.

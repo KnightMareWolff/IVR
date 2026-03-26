@@ -1,8 +1,6 @@
-﻿// -------------------------------------------------------------------------------
-// Copyright 2025 William Wolff. All Rights Reserved.
+﻿// Copyright 2025 William Wolff. All Rights Reserved.
 // This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
-// -------------------------------------------------------------------------------
 #include "Recording/IVRRecordingManager.h"
 #include "Recording/IVRRecordingSession.h"
 #include "Recording/IVRVideoEncoder.h" 
@@ -13,11 +11,11 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h" 
 #include "IVR.h" 
-#include "IVRFramePool.h" 
-
+#include "IVRFramePool.h"
 // Inicialização do Singleton Instance
 UIVRRecordingManager* UIVRRecordingManager::Instance = nullptr;
-UIVRRecordingManager* UIVRRecordingManager::Get()
+
+UIVRRecordingManager* UIVRRecordingManager::Get() // <--- ÚNICA DEFINIÇÃO MANTIDA
 {
     if (!Instance)
     {
@@ -82,8 +80,7 @@ UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSetti
     UE_LOG(LogIVR, Warning, TEXT("FFmpeg path not defined for current platform. Using default path."));
     FFmpegPath = FPaths::Combine(FFmpegPath, TEXT("Unsupported"), TEXT("ffmpeg")); 
 #endif
-    FPaths::NormalizeDirectoryName(FFmpegPath); 
-
+    FPaths::NormalizeDirectoryName(FFmpegPath);
     NewSession->Initialize(VideoSettings, FFmpegPath, ActualFrameWidth, ActualFrameHeight, InFramePool); 
     NewSession->StartRecording(); 
     
@@ -92,6 +89,7 @@ UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSetti
     UE_LOG(LogIVR, Log, TEXT("Started new recording session. FFmpeg path: %s"), *FFmpegPath);
     return NewSession;
 }
+
 void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
 {
     if (!Session)
@@ -113,7 +111,6 @@ void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
         TakeInfo.CustomOutputFolderName = Session->UserRecordingSettings.IVR_CustomOutputFolderName;
         TakeInfo.CustomOutputBaseFilename = Session->UserRecordingSettings.IVR_CustomOutputBaseFilename;
         // --- FIM DA ALTERAÇÃO ---
-
         CompletedTakes.Add(TakeInfo);
         UE_LOG(LogIVR, Log, TEXT("Take %d completed and added to list. File: %s"), TakeInfo.TakeNumber, *TakeInfo.FilePath);
     }
@@ -138,7 +135,6 @@ void UIVRRecordingManager::FinalizeAllRecordings(FString MasterVideoPath, const 
         UE_LOG(LogIVR, Error, TEXT("UtilityVideoEncoder is null. Cannot finalize recordings."));
         return;
     }
-
     if (!UtilityVideoEncoder->IsInitialized())
     {
         if (!UtilityVideoEncoder->Initialize(VideoSettings, FFmpegExecutablePath, VideoSettings.Width, VideoSettings.Height, nullptr)) 
@@ -178,7 +174,7 @@ void UIVRRecordingManager::ClearAllTakes()
     UE_LOG(LogIVR, Log, TEXT("Cleared all takes"));
 }
 
-// --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO ---
+// --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO E PASTA ABSOLUTA ---
 FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
 {
     if (CompletedTakes.Num() == 0)
@@ -186,16 +182,24 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
         UE_LOG(LogIVR, Warning, TEXT("No completed takes to generate master video."));
         return FString();
     }
-    FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
-    FString BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
-    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 
+    FString BaseDir;
     // Usa a subpasta customizada do último take (assumindo consistência entre takes)
-    if (CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputFolderName.IsEmpty())
+    // ou o nome padrão, e verifica se é um caminho absoluto usando !FPaths::IsRelative
+    if (CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputFolderName.IsEmpty() && !FPaths::IsRelative(CompletedTakes.Last().CustomOutputFolderName))
     {
-        BaseDir = FPaths::Combine(BaseDir, CompletedTakes.Last().CustomOutputFolderName);
+        BaseDir = CompletedTakes.Last().CustomOutputFolderName;
+    }
+    else
+    {
+        BaseDir = FPaths::ProjectSavedDir() / TEXT("Recordings"); 
+        if (CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputFolderName.IsEmpty())
+        {
+            BaseDir = FPaths::Combine(BaseDir, CompletedTakes.Last().CustomOutputFolderName);
+        }
     }
 
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
         PlatformFile.CreateDirectoryTree(*BaseDir);
@@ -206,13 +210,12 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     // Usa o nome base customizado do último take, se disponível
     FString MasterBaseFilename = CompletedTakes.Num() > 0 && !CompletedTakes.Last().CustomOutputBaseFilename.IsEmpty()
                                ? CompletedTakes.Last().CustomOutputBaseFilename
-                               : Timestamp;
+                               : FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")); // Usa timestamp como padrão
     MasterBaseFilename = FPaths::MakeValidFileName(MasterBaseFilename); // Garante nome de arquivo válido
-
-    MasterVideoFilePath = FString::Printf(TEXT("%s/%s_%s_Master.mp4"), *BaseDir, *MasterBaseFilename, *CurrentSessionID);
+    MasterVideoFilePath = FPaths::Combine(BaseDir, FString::Printf(TEXT("%s_%s_Master.mp4"), *MasterBaseFilename, *CurrentSessionID));
     // --- FIM DA ALTERAÇÃO ---
 
-    FString ConcatListFilePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Recordings"), FString::Printf(TEXT("concat_list_%s.txt"), *Timestamp));
+    FString ConcatListFilePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Recordings"), FString::Printf(TEXT("concat_list_%s.txt"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
     FString ConcatListContent;
     TArray<FString> TakeFilePaths;
     for (const FIVR_TakeInfo& Take : CompletedTakes)
@@ -220,7 +223,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
         ConcatListContent += FString::Printf(TEXT("file '%s'\n"), *Take.FilePath);
         TakeFilePaths.Add(Take.FilePath); 
     }
-
     if (!FFileHelper::SaveStringToFile(ConcatListContent, *ConcatListFilePath))
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to save concat list file to: %s"), *ConcatListFilePath);
@@ -238,7 +240,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     FFmpegPath = FPaths::Combine(FFmpegPath, TEXT("Unsupported"), TEXT("ffmpeg"));
 #endif
     FPaths::NormalizeDirectoryName(FFmpegPath);
-
     FString FFmpegArguments = FString::Printf(TEXT("-y -f concat -safe 0 -i %s -c copy -map 0:v %s"), *ConcatListFilePath, *MasterVideoFilePath); // Adicionado -map 0:v
     UE_LOG(LogIVR, Log, TEXT("Launching FFmpeg for concatenation. Executable: %s , Arguments: %s"), *FFmpegPath, *FFmpegArguments);
     if (!LaunchFFmpegProcessBlocking(FFmpegPath, FFmpegArguments))
@@ -257,6 +258,7 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     
     return MasterVideoFilePath;
 }
+
 // Implementação da função LaunchFFmpegProcessBlocking (AGORA PÚBLICA)
 bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, const FString& Arguments)
 {
@@ -272,7 +274,6 @@ bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, 
         nullptr, // StdOutPipeWrite
         nullptr  // StdErrPipeWrite
     );
-
     if (!ProcHandle.IsValid())
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to launch FFmpeg concat process. Check path and arguments."));

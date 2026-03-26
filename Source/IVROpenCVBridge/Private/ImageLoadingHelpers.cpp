@@ -1,4 +1,7 @@
 ﻿// IVROpenCVBridge/Private/ImageLoadingHelpers.cpp
+// Copyright 2025 William Wolff. All Rights Reserved.
+// This code is property of Williäm Wolff and protected by copyright law.
+// Proibited copy or distribution without expressed authorization of the Author.
 #include "IVROpenCVGlobals.h" // Para as declarações das funções públicas e o namespace IVROpenCVBridge
 #include "Misc/FileHelper.h" // Para FFileHelper::LoadFileToArray
 
@@ -103,7 +106,8 @@ namespace IVROpenCVBridge
             DecompressedData = MoveTemp(BGRATempData);
         }
 
-        // ... (restante da lógica de redimensionamento OpenCV) ...
+        // --- INÍCIO DA CORREÇÃO: Envolver o código OpenCV aqui ---
+        #if WITH_OPENCV
         cv::Mat OriginalImageMat(ImageWrapper->GetHeight(), ImageWrapper->GetWidth(), CV_8UC4, DecompressedData.GetData());
         if (OriginalImageMat.cols != TargetWidth || OriginalImageMat.rows != TargetHeight)
         {
@@ -119,5 +123,10 @@ namespace IVROpenCVBridge
             OutRawData = MoveTemp(DecompressedData);
         }
         return true;
+        #else // WITH_OPENCV == 0
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("IVROpenCVBridge: OpenCV não habilitado para a plataforma. Pulando redimensionamento de imagem. Imagem %s carregada mas não redimensionada para %dx%d. Usando dados descomprimidos originais."), *FilePath, TargetWidth, TargetHeight);
+        OutRawData = MoveTemp(DecompressedData); // Retorna os dados descomprimidos originais
+        return true; // Ainda reporta sucesso, pois os dados da imagem foram carregados
+        #endif // WITH_OPENCV
     }
 }

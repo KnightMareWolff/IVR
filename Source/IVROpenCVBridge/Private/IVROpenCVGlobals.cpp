@@ -224,24 +224,44 @@ namespace IVROpenCVBridge
     }
 #else // WITH_OPENCV == 0
     // Forneça implementações de fallback para plataformas sem OpenCV
-    void ProcessFrameAndExtractFeatures( /* ... */ )
+    void ProcessFrameAndExtractFeatures(
+        uint8* PixelData,
+        int32 Width,
+        int32 Height,
+        FTransform CameraTransform,
+        float CameraFOV,
+        int32 MaxCorners,
+        float QualityLevel,
+        float MinDistance,
+        bool bDebugDrawFeatures,
+        FOCV_NativeJustRTFeatures& OutFeatures // Saída das features
+    )
     {
-        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. ProcessFrameAndExtractFeatures is a no-op."));
-        // Inicialize OutFeatures com valores padrão para evitar lixo.
-        OutFeatures = FOCV_NativeJustRTFeatures();
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV não habilitado para a plataforma. ProcessFrameAndExtractFeatures é uma operação vazia (no-op)."));
+        // --- INÍCIO DA CORREÇÃO: Inicialização explícita dos membros ---
+        OutFeatures.JustRTInterestPoints.Empty();
+        OutFeatures.BiggestPointIndex = INDEX_NONE;
+        OutFeatures.SmallerPointIndex = INDEX_NONE;
+        OutFeatures.NumOfQuads = 0;
+        OutFeatures.NumOfRectangles = 0;
+        OutFeatures.HistogramRed.Empty();
+        OutFeatures.HistogramGreen.Empty();
+        OutFeatures.HistogramBlue.Empty();
+        // --- FIM DA CORREÇÃO ---
     }
     
     bool LoadAndResizeImage(const FString& FilePath, int32 TargetWidth, int32 TargetHeight, TArray<uint8>& OutRawData)
     {
-        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. LoadAndResizeImage will fail."));
-        return false;
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV não habilitado para a plataforma. LoadAndResizeImage será implementado no fallback do ImageLoadingHelpers.cpp."));
+        // Não precisamos de um fallback aqui, pois o fallback é tratado diretamente em ImageLoadingHelpers.cpp
+        return false; // Retorne false para indicar que o redimensionamento OpenCV não ocorreu
     }
 
     TArray<FString> ListWebcamDevicesNative()
     {
-        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV is not enabled for this platform. ListWebcamDevicesNative returns empty."));
+        UE_LOG(LogIVROpenCVBridge, Warning, TEXT("OpenCV não habilitado para a plataforma. ListWebcamDevicesNative retorna vazio."));
         TArray<FString> Devices;
-        Devices.Add(TEXT("OpenCV not enabled."));
+        Devices.Add(TEXT("OpenCV não habilitado."));
         return Devices;
     }
 #endif // WITH_OPENCV
