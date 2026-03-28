@@ -44,8 +44,7 @@ public:
 
      FIVR_PipeWrapper();
     ~FIVR_PipeWrapper();
-
-     /**
+    /**
     * Cria e abre o Named Pipe (Windows) ou FIFO (POSIX).
     * @param Settings As configurações para criar o pipe.
     * @param SessionID Um ID único para esta sessão, para garantir nomes de pipe únicos.
@@ -53,7 +52,7 @@ public:
     * @param InHeight Altura do vídeo (usada para calcular o tamanho do buffer do pipe).
     * @return true se o pipe foi criado e aberto com sucesso, false caso contrário.
     */
-    bool Create(const FIVR_PipeSettings& Settings, const FString& SessionID, int32 InWidth = 0, int32 InHeight = 0);
+    bool Create(const FIVR_PipeSettings& Settings, const FString& SessionID, int32 InWidth = 0, int32 InHeight = 0); // <--- ALTERAÇÃO: Adicionados parâmetros InWidth e InHeight
     /**
      * Tenta conectar-se ao Named Pipe. Este método bloqueará até que um cliente
      * (e.g., FFmpeg) se conecte ao pipe.
@@ -62,7 +61,6 @@ public:
      * @return true se a conexão foi bem-sucedida, false caso contrário.
      */
     bool Connect(); // <-- NOVO MÉTODO
-
     /**
      * Escreve dados no pipe.
      * @param Data Ponteiro para os dados a serem escritos.

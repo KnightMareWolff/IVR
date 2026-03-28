@@ -11,8 +11,7 @@
 #include "HAL/PlatformTime.h"    
 #include "HAL/PlatformFileManager.h"
 #include "HAL/FileManager.h"
-#include "Async/Async.h" 
-
+#include "Async/Async.h"
 // [MANUAL_REF_POINT] Includes para classes nativas agora no IVROpenCVBridge
 #include "../IVRGlobalStatics.h"
 #include "IVROpenCVBridge/Public/IVR_PipeWrapper.h"
@@ -28,23 +27,32 @@ UIVRRecordingSession::UIVRRecordingSession()
     , FramePool(nullptr) // Inicializa o FramePool
 {
 }
-
 UIVRRecordingSession::~UIVRRecordingSession()
 {
-    // Garante que a gravação seja interrompida e os recursos liberados.
-    // Apenas chame StopRecording se a sessão estiver ativa, para evitar warnings desnecessários.
+    // <--- ALTERAÇÃO: Garante que a gravação seja interrompida e os recursos liberados.
+    // Isso é uma rede de segurança para casos em que StopRecording() explícito pode ter sido perdido ou interrompido.
     if (bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized()))
     {
+        UE_LOG(LogIVRRecSession, Warning, TEXT("~UIVRRecordingSession: Forcibly stopping recording during destruction. SessionID: %s"), *SessionID);
         StopRecording(); 
     }
     
+    // <--- ALTERAÇÃO: Explicitamente juntar a thread de gravação aqui se ela ainda estiver ativa.
+    // Isso é crucial para prevenir crashes se a thread ainda estiver rodando quando o UObject é destruído.
+    if (RecordingThread)
+    {
+        UE_LOG(LogIVRRecSession, Warning, TEXT("~UIVRRecordingSession: Waiting for RecordingThread to complete during destruction. SessionID: %s"), *SessionID);
+        RecordingThread->WaitForCompletion();
+        delete RecordingThread;
+        RecordingThread = nullptr;
+    }
+
     if (HasNewFrameEvent)
     {
         FGenericPlatformProcess::ReturnSynchEventToPool(HasNewFrameEvent);
         HasNewFrameEvent = nullptr;
     }
 }
-
 void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool)
 {
     UserRecordingSettings = InVideoSettings;
@@ -52,7 +60,7 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
     FramePool = InFramePool;
     if (!FramePool) // Verifica se o FramePool é válido
     {
-        UE_LOG(LogIVRRecSession, Error, TEXT("UIVRRecordingSession::Initialize: FramePool is null. Cannot initialize."));
+        UE_LOG(LogIVRRecSession, Error, TEXT("UIVRRecordingSession::Initialize: FramePool é nulo. Cannot initialize."));
         return;
     }
     // Garante que o VideoEncoder seja inicializado uma única vez para esta sessão/take.
@@ -78,7 +86,6 @@ void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings,
     
      UE_LOG(LogIVRRecSession, Log, TEXT("IVR Recording Session Initialized. FFmpeg Path: %s. Actual Frame Size: %dx%d"), *InFFmpegExecutablePath, InActualFrameWidth, InActualFrameHeight);
 }
-
 bool UIVRRecordingSession::StartRecording()
 {
     if (bIsRecording || bIsPaused)
@@ -126,7 +133,6 @@ bool UIVRRecordingSession::StartRecording()
     UE_LOG(LogIVRRecSession, Log, TEXT("FFmpeg recording session started for take: %s"), *CurrentTakeFilePath);
     return true; 
 }
-
 void UIVRRecordingSession::StopRecording()
 {
     // Validação robusta para evitar warnings falsos ou tentar parar algo que já está parado.
@@ -140,31 +146,39 @@ void UIVRRecordingSession::StopRecording()
 
     bIsRecording.AtomicSet(false);
     bIsPaused.AtomicSet(false);
-    bStopThread.AtomicSet(true); 
-
+    bStopThread.AtomicSet(true);
     if (HasNewFrameEvent)
     {
         HasNewFrameEvent->Trigger();
     }
-    // Primeiro, sinaliza ao VideoEncoder que não haverá mais frames para gravação do take atual.
+
+    // <--- ALTERAÇÃO: 1. Sinaliza ao VideoEncoder que não haverá mais frames e ESPERA que ele termine de escrever.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
-        VideoEncoder->FinishEncoding();
+        // Esta é uma chamada bloqueante CRÍTICA na game thread para garantir que todos os frames sejam escritos
+        // e o pipe seja fechado para o FFmpeg.
+        UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Calling VideoEncoder->FinishEncoding() and waiting."), *SessionID);
+        VideoEncoder->FinishEncoding(); // Esta função já aguarda a FrameQueue esvaziar e o pipe fechar.
     }
-    // Espera o thread de gravação local terminar
+
+    // <--- ALTERAÇÃO: 2. Espera o thread de gravação local terminar (já sinalizado com bStopThread = true)
     if (RecordingThread)
     {
-        UE_LOG(LogIVRRecSession, Log, TEXT("Waiting for recording thread to complete..."));
+        UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Waiting for RecordingThread to complete."), *SessionID);
         RecordingThread->WaitForCompletion(); 
         delete RecordingThread;
         RecordingThread = nullptr;
-        UE_LOG(LogIVRRecSession, Log, TEXT("Recording thread stopped."));
+        UE_LOG(LogIVRRecSession, Log, TEXT("Recording thread stopped for SessionID %s."), *SessionID);
     }
-    // Agora, desliga o processo principal do FFmpeg através do VideoEncoder.
+
+    // <--- ALTERAÇÃO: 3. Agora, desliga o processo principal do FFmpeg e libera todos os recursos.
+    // Esta chamada é crucial para garantir que o processo FFmpeg seja fechado e o handle do pipe liberado corretamente.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
-        VideoEncoder->ShutdownEncoder();
+        UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Calling VideoEncoder->ShutdownEncoder()."), *SessionID);
+        VideoEncoder->ShutdownEncoder(); // Isso internamente aguarda o processo FFmpeg.
     }
+
     // Calcula a duração final da gravação
     RecordingDuration = (FDateTime::Now() - StartTime).GetTotalSeconds();
     UE_LOG(LogIVRRecSession, Log, TEXT("Take recording stopped. Final duration: %.2f seconds. File intended for: %s"), RecordingDuration, *CurrentTakeFilePath);
@@ -172,7 +186,6 @@ void UIVRRecordingSession::StopRecording()
     // A validação se o arquivo foi realmente criado será feita pelo UIVRRecordingManager.
     // NENHUMA LÓGICA DE CONCATENAÇÃO AQUI.
 }
-
 void UIVRRecordingSession::PauseRecording()
 {
     if (bIsRecording && !bIsPaused)
@@ -199,7 +212,6 @@ float UIVRRecordingSession::GetDuration() const
     }
     return RecordingDuration;
 }
-
 void UIVRRecordingSession::ClearQueues()
 {
     FIVR_VideoFrame DummyVideoFrame;
@@ -214,7 +226,6 @@ void UIVRRecordingSession::ClearQueues()
     VideoConsumerQCounter = 0;
     VideoProducerQCounter = 0;
 }
-
 // Adiciona um frame de vídeo à fila. Timestamp já é o tempo global.
 void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mudada
 {
@@ -250,7 +261,6 @@ void UIVRRecordingSession::AddVideoFrame(FIVR_VideoFrame Frame) // Assinatura mu
         HasNewFrameEvent->Trigger(); 
     }
 }
-
 // --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO ABSOLUTO (USANDO !FPaths::IsRelative) ---
 FString UIVRRecordingSession::GenerateTakeFilePath()
 {
@@ -286,13 +296,11 @@ FString UIVRRecordingSession::GenerateTakeFilePath()
     }
     // Garante que o nome do arquivo seja válido para o sistema de arquivos
     BaseFilenamePart = FPaths::MakeValidFileName(BaseFilenamePart);
-
     FString NewTakePath = FPaths::Combine(BaseDir, FString::Printf(TEXT("%s_%s_Take.mp4"), *BaseFilenamePart, *SessionID));
     UE_LOG(LogIVRRecSession, Log, TEXT("Generated take file: %s"), *NewTakePath);
     return NewTakePath;
 }
 // --- FIM DA ALTERAÇÃO ---
-
 // C4: Ajuste para gerar o Master File Path de forma independente
 FString UIVRRecordingSession::GenerateMasterFilePath() const
 {
@@ -316,7 +324,6 @@ bool UIVRRecordingSession::Init()
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Initialized."));
     return true;
 }
-
 uint32 UIVRRecordingSession::Run()
 {
     
@@ -374,7 +381,6 @@ uint32 UIVRRecordingSession::Run()
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Run loop finished."));
     return 0;
 }
-
 void UIVRRecordingSession::Stop()
 {
     UE_LOG(LogIVRRecSession, Log, TEXT("IVRecThread: Stop signal received."));

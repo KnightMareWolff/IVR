@@ -16,7 +16,6 @@
 #include "IVROpenCVBridge/Public/IVR_PipeWrapper.h"
 // [MANUAL_REF_POINT] FVideoEncoderWorker agora é de IVROpenCVBridge
 #include "IVROpenCVBridge/Public/FVideoEncoderWorker.h"
-
 // Definição do LogCategory
 DEFINE_LOG_CATEGORY(LogIVRVideoEncoder);
 // =====================================================================================
@@ -56,7 +55,6 @@ void UIVRVideoEncoder::BeginDestroy()
     }
     Super::BeginDestroy();
 }
-
 FString UIVRVideoEncoder::GetFFmpegExecutablePathInternal() const
 {
     // Se FFmpegExecutablePath estiver definido no Blueprint (EditAnywhere), use-o.
@@ -77,7 +75,6 @@ FString UIVRVideoEncoder::GetFFmpegExecutablePathInternal() const
     UE_LOG(LogIVRVideoEncoder, Error, TEXT("FFmpeg executable path not defined for current platform!"));
     return FString();
 #endif
-
     FPaths::NormalizeDirectoryName(Path);
     return Path;
 }
@@ -115,14 +112,15 @@ bool UIVRVideoEncoder::Initialize(const FIVR_VideoSettings& Settings, const FStr
     EncoderCommandFactory->IVR_SetPipeSettings(); // Define as configurações padrão para o pipe.
     // 1. Gerar um nome de pipe único para esta sessão
     VideoPipeBaseName = FString::Printf(TEXT("IVIPipe%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Mid(0,5));
-    // 2. Configurar o Named Pipe para vídeo
+// 2. Configurar o Named Pipe para vídeo
     FIVR_PipeSettings PipeSettings = EncoderCommandFactory->IVR_GetPipeSettings();
     PipeSettings.BasePipeName = VideoPipeBaseName; // Use o nome único gerado
     PipeSettings.bBlockingMode = true; // Escrita bloqueante para garantir dados sequenciais
     PipeSettings.bMessageMode = false; // Modo byte stream para dados de vídeo raw
     PipeSettings.bDuplexAccess = false; // Apenas o UE escreve, FFmpeg lê
     // Tentar criar o Named Pipe
-    if (!VideoInputPipe.Create(PipeSettings, TEXT(""))) // Passamos string vazia para SessionID pois já está no BasePipeName
+    // <--- ALTERAÇÃO: Passar a largura e altura reais para o FIVR_PipeWrapper::Create()
+    if (!VideoInputPipe.Create(PipeSettings, TEXT(""), ActualProcessingWidth, ActualProcessingHeight)) 
     {
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("Failed to create video Named Pipe: %s"), *VideoInputPipe.GetFullPipeName());
         return false;
@@ -216,7 +214,6 @@ bool UIVRVideoEncoder::LaunchEncoder(const FString& LiveOutputFilePath)
     // Importante: Feche as extremidades de escrita dos pipes no processo pai, pois o FFmpeg as herdou.
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStdout);
     FPlatformProcess::ClosePipe(nullptr, FFmpegWritePipeStderr);
-
     return true;
 }
 void UIVRVideoEncoder::ShutdownEncoder()
@@ -227,8 +224,7 @@ void UIVRVideoEncoder::ShutdownEncoder()
     }
 
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Shutting down UIVRVideoEncoder..."));
-
-    // 1. Sinaliza à worker thread para parar
+// 1. Sinaliza à worker thread para parar
     bStopWorkerThread.AtomicSet(true); 
     if (NewFrameEvent) NewFrameEvent->Trigger(); // Acorda a thread caso esteja esperando por um evento
     // 2. Aguarda a conclusão da worker thread
@@ -262,7 +258,6 @@ bool UIVRVideoEncoder::EncodeFrame(FIVR_VideoFrame Frame)
         {
             FramePool->ReleaseFrame(Frame.RawDataPtr);
         }
-
         return false;
     }
     // LOG DE DEBUG: Confirma o tamanho do frame antes de enfileirar no Encoder
@@ -282,7 +277,6 @@ bool UIVRVideoEncoder::FinishEncoding()
         UE_LOG(LogIVRVideoEncoder, Error, TEXT("UIVRVideoEncoder is not initialized. Cannot finish encoding."));
         return false;
     }
-
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Signaling UIVRVideoEncoder to finish encoding..."));
     // Sinaliza que não haverá mais frames para codificar
     bNoMoreFramesToEncode.AtomicSet(true);
@@ -377,7 +371,6 @@ bool UIVRVideoEncoder::ConcatenateVideos(const TArray<FString>& InTakePaths, con
     UE_LOG(LogIVRVideoEncoder, Log, TEXT("Videos concatenated successfully to: %s"), *InMasterOutputPath);
     return true;
 }
-
 // --- INÍCIO DA ALTERAÇÃO: ADICIONAR TIMEOUT AO FECHAMENTO DO PROCESSO FFmpeg ---
 void UIVRVideoEncoder::InternalCleanupEncoderResources()
 {
@@ -413,7 +406,6 @@ void UIVRVideoEncoder::InternalCleanupEncoderResources()
             FPlatformProcess::Sleep(0.1f); // Verifica a cada 100ms
             ElapsedWaitTime += 0.1f;
         }
-
         if (FPlatformProcess::IsProcRunning(FFmpegProcHandle))
         {
             // Se o processo ainda estiver rodando após o timeout, force o encerramento.
@@ -428,7 +420,6 @@ void UIVRVideoEncoder::InternalCleanupEncoderResources()
         int32 ReturnCode = -1;
         FPlatformProcess::GetProcReturnCode(FFmpegProcHandle, &ReturnCode); 
         UE_LOG(LogIVRVideoEncoder, Log, TEXT("Main FFmpeg process exited with code: %d"), ReturnCode);
-
         FPlatformProcess::CloseProc(FFmpegProcHandle); // Libera o handle do processo
         FFmpegProcHandle.Reset();
     }

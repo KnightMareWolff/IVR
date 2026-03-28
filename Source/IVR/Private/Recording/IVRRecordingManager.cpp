@@ -14,7 +14,6 @@
 #include "IVRFramePool.h"
 // Inicialização do Singleton Instance
 UIVRRecordingManager* UIVRRecordingManager::Instance = nullptr;
-
 UIVRRecordingManager* UIVRRecordingManager::Get() // <--- ÚNICA DEFINIÇÃO MANTIDA
 {
     if (!Instance)
@@ -30,9 +29,9 @@ void UIVRRecordingManager::Initialize()
 {
     // REMOVIDO: AudioCapture = NewObject<UIVRAudioCaptureSystem>(this); 
     UtilityVideoEncoder = NewObject<UIVRVideoEncoder>(this); // Cria uma instância para uso geral (ex: concatenação)
+    bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Inicializar a nova flag
     UE_LOG(LogIVR, Log, TEXT("IVR Recording Manager initialized"));
 }
-
 void UIVRRecordingManager::Cleanup()
 {
     // Limpa todas as sessões ativas no momento do Cleanup
@@ -58,15 +57,36 @@ void UIVRRecordingManager::Cleanup()
         Instance = nullptr;
     }
 
+    CurrentActiveRecordingSession.Reset(); // Limpar a referência da sessão ativa
+    bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Garantir que seja resetado
+
     UE_LOG(LogIVR, Log, TEXT("IVR Recording Manager cleaned up"));
 }
-
 UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSettings& VideoSettings, int32 ActualFrameWidth, int32 ActualFrameHeight, UIVRFramePool* InFramePool)
 {
+    FScopeLock Lock(&ManagerMutex); // Adquirir lock para garantir que apenas uma operação de gravação ocorra por vez
+
+    // <--- ALTERAÇÃO: Checagem se já há uma sessão ativa
+    if (CurrentActiveRecordingSession.IsValid()) 
+    {
+        UE_LOG(LogIVR, Warning, TEXT("IVRRecordingManager: Uma sessão de gravação (take individual) já está ativa. Por favor, pare-a primeiro para iniciar outra."));
+        return nullptr;
+    }
+
+    // <--- ALTERAÇÃO: Checagem se o manager está gerando o vídeo mestre
+    if (bIsGeneratingMasterVideo) 
+    {
+        UE_LOG(LogIVR, Warning, TEXT("IVRRecordingManager: Manager está ocupado gerando o vídeo mestre. Não é possível iniciar uma nova sessão de gravação."));
+        return nullptr;
+    }
+
+    // bIsGeneratingMasterVideo.AtomicSet(true); // <--- REMOVIDO: Esta flag não é para takes individuais
+
     UIVRRecordingSession* NewSession = NewObject<UIVRRecordingSession>(this);
     if (!NewSession)
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to create new IVRRecordingSession."));
+        // bIsGeneratingMasterVideo.AtomicSet(false); // <--- REMOVIDO: Não aplicável aqui
         return nullptr;
     }
     FString FFmpegPath = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("IVR"), TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
@@ -82,18 +102,33 @@ UIVRRecordingSession* UIVRRecordingManager::StartRecording(const FIVR_VideoSetti
 #endif
     FPaths::NormalizeDirectoryName(FFmpegPath);
     NewSession->Initialize(VideoSettings, FFmpegPath, ActualFrameWidth, ActualFrameHeight, InFramePool); 
-    NewSession->StartRecording(); 
     
+    if (!NewSession->StartRecording()) // Checar se o StartRecording da sessão falhou
+    {
+        UE_LOG(LogIVR, Error, TEXT("IVRRecordingManager: Falha ao iniciar gravação na nova sessão."));
+        // bIsGeneratingMasterVideo.AtomicSet(false); // <--- REMOVIDO: Não aplicável aqui
+        return nullptr;
+    }
+
     ActiveSessions.Add(NewSession);
+    CurrentActiveRecordingSession = NewSession; // Manter rastreamento da sessão ativa, este é o "ocupado" para takes
     
     UE_LOG(LogIVR, Log, TEXT("Started new recording session. FFmpeg path: %s"), *FFmpegPath);
     return NewSession;
 }
-
 void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
 {
     if (!Session)
         return;
+
+    // <--- ALTERAÇÃO: Adicionar um lock aqui também, para proteger o acesso a CurrentActiveRecordingSession
+    FScopeLock Lock(&ManagerMutex);
+    // Liberar a referência da sessão ativa.
+    if (CurrentActiveRecordingSession.Get() == Session)
+    {
+        CurrentActiveRecordingSession.Reset();
+    }
+
     Session->StopRecording(); 
     
     FString SessionOutputPath = Session->GetOutputPath();
@@ -118,21 +153,29 @@ void UIVRRecordingManager::StopRecording(UIVRRecordingSession* Session)
     {
         UE_LOG(LogIVR, Warning, TEXT("Take completed, but file not found or path invalid: %s. Not added to CompletedTakes list."), *SessionOutputPath);
     }
-
     ActiveSessions.Remove(Session);
+    // <--- ALTERAÇÃO: A flag `bIsGeneratingMasterVideo` NÃO é resetada aqui, pois a concatenação pode acontecer depois.
 }
 
 void UIVRRecordingManager::FinalizeAllRecordings(FString MasterVideoPath, const FIVR_VideoSettings& VideoSettings, const FString& FFmpegExecutablePath)
 {
+    // <--- ALTERAÇÃO: Bloquear para operações de finalização
+    FScopeLock Lock(&ManagerMutex);
+    
+    // <--- ALTERAÇÃO: Definir flag de ocupado no início
+    bIsGeneratingMasterVideo.AtomicSet(true); 
+
     if (CompletedTakes.Num() == 0)
     {
         UE_LOG(LogIVR, Warning, TEXT("No completed takes to finalize into a master video."));
+        bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado se nenhum trabalho foi feito
         return;
     }
 
     if (!UtilityVideoEncoder)
     {
         UE_LOG(LogIVR, Error, TEXT("UtilityVideoEncoder is null. Cannot finalize recordings."));
+        bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado em caso de falha
         return;
     }
     if (!UtilityVideoEncoder->IsInitialized())
@@ -140,10 +183,10 @@ void UIVRRecordingManager::FinalizeAllRecordings(FString MasterVideoPath, const 
         if (!UtilityVideoEncoder->Initialize(VideoSettings, FFmpegExecutablePath, VideoSettings.Width, VideoSettings.Height, nullptr)) 
         {
             UE_LOG(LogIVR, Error, TEXT("Failed to initialize UtilityVideoEncoder for concatenation."));
+            bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado em caso de falha
             return;
         }
     }
-
     TArray<FString> TakeFilePaths;
     for (const FIVR_TakeInfo& Take : CompletedTakes)
     {
@@ -161,6 +204,7 @@ void UIVRRecordingManager::FinalizeAllRecordings(FString MasterVideoPath, const 
     }
 
     UtilityVideoEncoder->ShutdownEncoder();
+    bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado após a finalização
 }
 
 TArray<FIVR_TakeInfo> UIVRRecordingManager::GetAllTakes() const
@@ -173,16 +217,20 @@ void UIVRRecordingManager::ClearAllTakes()
     CompletedTakes.Empty();
     UE_LOG(LogIVR, Log, TEXT("Cleared all takes"));
 }
-
 // --- INÍCIO DA ALTERAÇÃO: CUSTOMIZAÇÃO DE NOME DE ARQUIVO E PASTA ABSOLUTA ---
 FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
 {
+    FScopeLock Lock(&ManagerMutex); // Garantir acesso exclusivo durante a geração do vídeo mestre
+
+    // <--- ALTERAÇÃO: Definir flag de ocupado no início
+    bIsGeneratingMasterVideo.AtomicSet(true); 
+
     if (CompletedTakes.Num() == 0)
     {
         UE_LOG(LogIVR, Warning, TEXT("No completed takes to generate master video."));
+        bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado se nenhum trabalho foi feito
         return FString();
     }
-
     FString BaseDir;
     // Usa a subpasta customizada do último take (assumindo consistência entre takes)
     // ou o nome padrão, e verifica se é um caminho absoluto usando !FPaths::IsRelative
@@ -198,7 +246,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
             BaseDir = FPaths::Combine(BaseDir, CompletedTakes.Last().CustomOutputFolderName);
         }
     }
-
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
     if (!PlatformFile.DirectoryExists(*BaseDir))
     {
@@ -214,7 +261,6 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     MasterBaseFilename = FPaths::MakeValidFileName(MasterBaseFilename); // Garante nome de arquivo válido
     MasterVideoFilePath = FPaths::Combine(BaseDir, FString::Printf(TEXT("%s_%s_Master.mp4"), *MasterBaseFilename, *CurrentSessionID));
     // --- FIM DA ALTERAÇÃO ---
-
     FString ConcatListFilePath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Recordings"), FString::Printf(TEXT("concat_list_%s.txt"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
     FString ConcatListContent;
     TArray<FString> TakeFilePaths;
@@ -226,6 +272,7 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     if (!FFileHelper::SaveStringToFile(ConcatListContent, *ConcatListFilePath))
     {
         UE_LOG(LogIVR, Error, TEXT("Failed to save concat list file to: %s"), *ConcatListFilePath);
+        bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado em caso de falha
         return FString();
     }
     FString FFmpegPath = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("IVR"), TEXT("ThirdParty"), TEXT("FFmpeg"), TEXT("Binaries"));
@@ -246,19 +293,20 @@ FString UIVRRecordingManager::GenerateMasterVideoAndCleanup()
     {
         UE_LOG(LogIVR, Error, TEXT("FFmpeg concatenation process failed."));
         IFileManager::Get().Delete(*ConcatListFilePath);
+        bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: Resetar flag de ocupado em caso de falha
         return FString();
     }
     IFileManager::Get().Delete(*ConcatListFilePath);
-
     UE_LOG(LogIVR, Log, TEXT("Master video generated successfully: %s"), *MasterVideoFilePath);
 
     CleanupIndividualTakes();
     IFileManager::Get().Delete(*ConcatListFilePath);
     CompletedTakes.Empty(); 
     
+    bIsGeneratingMasterVideo.AtomicSet(false); // <--- ALTERAÇÃO: CRÍTICO: Resetar flag de ocupado SOMENTE APÓS TODA A FINALIZAÇÃO DO MESTRE
+
     return MasterVideoFilePath;
 }
-
 // Implementação da função LaunchFFmpegProcessBlocking (AGORA PÚBLICA)
 bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, const FString& Arguments)
 {
@@ -279,7 +327,6 @@ bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, 
         UE_LOG(LogIVR, Error, TEXT("Failed to launch FFmpeg concat process. Check path and arguments."));
         return false;
     }
-
     FPlatformProcess::WaitForProc(ProcHandle);
     int32 ReturnCode = -1;
     FPlatformProcess::GetProcReturnCode(ProcHandle, &ReturnCode);
@@ -291,7 +338,6 @@ bool UIVRRecordingManager::LaunchFFmpegProcessBlocking(const FString& ExecPath, 
     }
     return true;
 }
-
 void UIVRRecordingManager::CleanupIndividualTakes()
 {
     IFileManager& FileManager = IFileManager::Get();

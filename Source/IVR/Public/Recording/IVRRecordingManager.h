@@ -1,6 +1,6 @@
 ﻿// -------------------------------------------------------------------------------
 // Copyright 2025 William Wolff. All Rights Reserved.
-// This code is property of WilliÃ¤m Wolff and protected by copywright law.
+// This code is property of Williäm Wolff and protected by copyright law.
 // Proibited copy or distribution without expressed authorization of the Author.
 // -------------------------------------------------------------------------------
 #pragma once
@@ -8,6 +8,8 @@
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "IVRTypes.h" 
+#include "HAL/ThreadSafeBool.h" // <--- NOVA LINHA: Para FThreadSafeBool
+#include "HAL/CriticalSection.h" // <--- NOVA LINHA: Para FCriticalSection
 
 #include "IVRRecordingManager.generated.h"
 
@@ -42,9 +44,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "IVR|Recording")
     FString GenerateMasterVideoAndCleanup();
 
-    // TORNANDO LaunchFFmpegProcessBlocking P�BLICA PARA ACESSO EXTERNO VIA SINGLETON
-    // (UIVRCaptureComponent precisar� cham�-la)
+    // TORNANDO LaunchFFmpegProcessBlocking PÚBLICA PARA ACESSO EXTERNO VIA SINGLETON
+    // (UIVRCaptureComponent precisará chamá-la)
     bool LaunchFFmpegProcessBlocking(const FString& ExecPath, const FString& Arguments);
+
+    // <--- ALTERAÇÃO: Novo getter para a flag de geração de vídeo mestre
+    UFUNCTION(BlueprintPure, Category = "IVR")
+    bool IsGeneratingMasterVideo() const { return bIsGeneratingMasterVideo; }
+    
+    // <--- ALTERAÇÃO: Novo setter para a flag de geração de vídeo mestre
+    void SetGeneratingMasterVideo(bool bState) { bIsGeneratingMasterVideo.AtomicSet(bState); } 
 
 private:
     static UIVRRecordingManager* Instance;
@@ -70,5 +79,8 @@ private:
     
     void CleanupIndividualTakes();
 
+    // <--- ALTERAÇÃO: Renomeado bIsManagerBusy para bIsGeneratingMasterVideo
+    FThreadSafeBool bIsGeneratingMasterVideo = false; 
+    TWeakObjectPtr<UIVRRecordingSession> CurrentActiveRecordingSession; // Manter uma referência fraca para garantir apenas uma sessão principal ativa
+    FCriticalSection ManagerMutex; // Mutex para acesso thread-safe ao estado do manager
 };
-

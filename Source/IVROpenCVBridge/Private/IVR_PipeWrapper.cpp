@@ -9,8 +9,6 @@
 #include "Misc/Paths.h" // Para FPaths::GetTempDir
 #include "HAL/PlatformFileManager.h" // Para IPlatformFileManager (adicionado para mkpath)
 #include "HAL/FileManager.h" // Para IFileManager (adicionado para mkpath)
-
-
 // Definição de LogCategory (agora do módulo IVR, se for usado o LogIVR.
 // Se quiser um log separado, defina LogIVRPipeWrapper no IVROpenCVBridge.h/.cpp)
 DEFINE_LOG_CATEGORY(LogIVRPipeWrapper);
@@ -33,6 +31,7 @@ FIVR_PipeWrapper::~FIVR_PipeWrapper()
 }
 
 // Create Pipe
+// <--- ALTERAÇÃO: Adicionados parâmetros InWidth e InHeight para calcular o tamanho do buffer.
 bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& SessionID, int32 InWidth, int32 InHeight)
 {
     if (IsValid())
@@ -48,7 +47,6 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     // Para Windows: \.\pipe\<BasePipeName>_<SessionID>
     // Para POSIX: /tmp/<BasePipeName>_<SessionID> (ou outro diretório temporário seguro)
     FString UniquePipeName = FString::Printf(TEXT("%s%s"), *BasePipeName , *SessionID);
-
 #if PLATFORM_WINDOWS
     FullPipePath = FString::Printf(TEXT("\\\\.\\pipe\\%s"), *UniquePipeName);
     DWORD OpenMode = PIPE_ACCESS_OUTBOUND; // UE escreve, FFmpeg lê
@@ -61,7 +59,8 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     {
         PipeMode |= PIPE_NOWAIT; // Modo não-bloqueante
     }
-    DWORD CalculatedBufferSize = Settings.OutBufferSize; // Valor padrão da PipeSettings
+    // <--- ALTERAÇÃO: Usar InWidth e InHeight para calcular o tamanho do buffer do pipe.
+    DWORD CalculatedBufferSize = Settings.OutBufferSize; 
     if (InWidth > 0 && InHeight > 0)
     {
         // Assumindo BGRA (4 bytes por pixel)
@@ -70,6 +69,7 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
         // Um valor muito grande pode ser internamente truncado.
         // 8MB (para 1080p BGRA) é geralmente OK, mas é bom ter em mente.
     }
+
     // Cria a instância do Named Pipe
     PipeHandle = CreateNamedPipe(
         *FullPipePath,            // Nome do pipe
@@ -88,8 +88,7 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
         UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to create Windows Named Pipe '%s'. Error: %d"), *FullPipePath, ErrorCode);
         return false;
     }
-
-    // Apenas defina bIsCreatedAndConnected como true, pois o pipe foi criado com sucesso.
+// Apenas defina bIsCreatedAndConnected como true, pois o pipe foi criado com sucesso.
     bIsCreatedAndConnected = true;
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("Windows Named Pipe '%s' created successfully and awaiting client connection."), *FullPipePath);
 #elif PLATFORM_LINUX || PLATFORM_MAC
@@ -103,7 +102,6 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
         PlatformFile.CreateDirectoryTree(*TempPipeDir);
         UE_LOG(LogIVRPipeWrapper, Log, TEXT("Created temporary pipe directory: %s"), *TempPipeDir);
     }
-
     FullPipePath = FPaths::Combine(TempPipeDir, UniquePipeName);
     // Tenta deletar o FIFO se ele já existir, para garantir um novo começo limpo.
     // mkfifo falharia se o arquivo já existisse.
@@ -131,7 +129,6 @@ bool FIVR_PipeWrapper::Create(const FIVR_PipeSettings& Settings, const FString& 
     // será feita em Connect().
     bIsCreatedAndConnected = true;
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' created successfully. Opening for writing will happen in Connect()."), *FullPipePath);
-
 #else // Outras plataformas (se houver)
     UE_LOG(LogIVRPipeWrapper, Error, TEXT("FIVR_PipeWrapper::Create not implemented for this platform."));
     return false;
@@ -149,7 +146,6 @@ bool FIVR_PipeWrapper::Connect()
         UE_LOG(LogIVRPipeWrapper, Error, TEXT("Cannot connect. Pipe was not created. Call Create() first."));
         return false;
     }
-
 #if PLATFORM_WINDOWS
     // ConnectNamedPipe é a chamada bloqueante no Windows
     if (PipeHandle == INVALID_HANDLE_VALUE) // Caso o handle tenha se invalidado.
@@ -174,7 +170,7 @@ bool FIVR_PipeWrapper::Connect()
     // Para POSIX, mover a chamada open() bloqueante para Connect()
     if (FileDescriptor != -1) // Se já estiver aberto (ex: tentativa anterior de Connect()), consideramos conectado.
     {
-        UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' already open for writing (FileDescriptor: %d)."), *FullPipePath, FileDescriptor);
+        UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' already open for writing (FileDescriptor: %d).", *FullPipePath, FileDescriptor));
         return true;
     }
     
@@ -182,14 +178,13 @@ bool FIVR_PipeWrapper::Connect()
     UE_LOG(LogIVRPipeWrapper, Log, TEXT("Opening FIFO '%s' for writing... (will block if no reader)"), *FullPipePath);
     // Não usar O_NONBLOCK aqui, para que 'open()' bloqueie até que um leitor se conecte.
     FileDescriptor = open(TCHAR_TO_UTF8(*FullPipePath), O_WRONLY);
-
     if (FileDescriptor == -1)
     {
         UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to open FIFO '%s' for writing. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
         // Não precisa de unlink aqui, o FIFO já existe, apenas falhou a abertura para escrita.
         return false;
     }
-    UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' opened successfully for writing (FileDescriptor: %d)."), *FullPipePath, FileDescriptor);
+    UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' opened successfully for writing (FileDescriptor: %d).", *FullPipePath, FileDescriptor));
     return true;
 #else
     UE_LOG(LogIVRPipeWrapper, Warning, TEXT("Connect() not explicitly implemented for this platform. Defaulting to true."));
@@ -199,17 +194,23 @@ bool FIVR_PipeWrapper::Connect()
 // Write to Pipe
 int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
 {
+    // <--- ALTERAÇÃO: Re-checagem de IsValid() e tratamento de erros de pipe quebrado
     if (!IsValid())
     {
-        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Attempted to write to an invalid or uninitialized pipe."));
+        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Attempted to write to an invalid or uninitialized pipe: %s. Data will be dropped."), *FullPipePath);
         return -1;
     }
-
 #if PLATFORM_WINDOWS
     DWORD BytesWritten;
     if (!WriteFile(PipeHandle, Data, NumBytes, &BytesWritten, nullptr))
     {
-        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to write to Windows Named Pipe '%s'. Error: %d"), *FullPipePath, GetLastError());
+        DWORD ErrorCode = GetLastError();
+        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to write to Windows Named Pipe '%s'. Error: %d. Pipe may be broken or closed."), *FullPipePath, ErrorCode);
+        // Se o pipe estiver quebrado, invalidar o handle imediatamente.
+        if (ErrorCode == ERROR_BROKEN_PIPE || ErrorCode == ERROR_PIPE_NOT_CONNECTED)
+        {
+            Close(); // <--- ALTERAÇÃO: Marcar como fechado para evitar mais tentativas.
+        }
         return -1;
     }
     if (BytesWritten != (DWORD)NumBytes)
@@ -223,11 +224,19 @@ int32 FIVR_PipeWrapper::Write(const uint8* Data, int32 NumBytes)
     ssize_t BytesWritten = write(FileDescriptor, Data, NumBytes);
     if (BytesWritten == -1)
     {
-        UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to write to FIFO '%s'. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
+        // Checar errno para erros específicos que indicam um pipe quebrado (e.g., EPIPE)
+        if (errno == EPIPE)
+        {
+            UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to write to FIFO '%s'. Pipe is broken (no readers). Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
+            Close(); // <--- ALTERAÇÃO: Marcar como fechado para evitar mais tentativas.
+        }
+        else
+        {
+            UE_LOG(LogIVRPipeWrapper, Error, TEXT("Failed to write to FIFO '%s'. Error: %s"), *FullPipePath, UTF8_TO_TCHAR(strerror(errno)));
+        }
         return -1;
     }
     return (int32)BytesWritten;
-
 #else // Outras plataformas
     UE_LOG(LogIVRPipeWrapper, Error, TEXT("FIVR_PipeWrapper::Write not implemented for this platform."));
     return -1;
@@ -241,27 +250,26 @@ void FIVR_PipeWrapper::Close()
     {
         return;
     }
-
 #if PLATFORM_WINDOWS
     if (PipeHandle != INVALID_HANDLE_VALUE)
     {
         FlushFileBuffers(PipeHandle); // Garante que todos os dados sejam gravados
         DisconnectNamedPipe(PipeHandle); // Desconecta o cliente
         CloseHandle(PipeHandle);         // Fecha o handle
-        PipeHandle = INVALID_HANDLE_VALUE;
+        PipeHandle = INVALID_HANDLE_VALUE; // <--- ALTERAÇÃO: Garantir que seja SEMPRE setado para inválido
         UE_LOG(LogIVRPipeWrapper, Log, TEXT("Windows Named Pipe '%s' closed."), *FullPipePath);
     }
 #elif PLATFORM_LINUX || PLATFORM_MAC
     if (FileDescriptor != -1)
     {
         close(FileDescriptor); // Fecha o descritor de arquivo
-        FileDescriptor = -1;
+        FileDescriptor = -1; // <--- ALTERAÇÃO: Garantir que seja SEMPRE setado para inválido
         UE_LOG(LogIVRPipeWrapper, Log, TEXT("FIFO '%s' file descriptor closed."), *FullPipePath);
     }
     // No Linux, o arquivo FIFO em si é limpo quando o módulo IVROpenCVBridge é desligado
     // (ex: na ShutdownModule() ou um Clean() mais abrangente).
     // Evitamos unlink() aqui para não remover o FIFO enquanto o FFmpeg ainda pode estar lendo dele,
-    // ou se o processo precisar reabrir o pipe rapidamente.
+// ou se o processo precisar reabrir o pipe rapidamente.
     // O ideal é que o 'unlink' do FIFO seja feito *antes* de 'mkfifo' para garantir uma limpeza antes da criação,
     // ou no momento de desligamento do módulo/plugin, se o FIFO for persistir durante a execução do processo.
     // Para o nosso caso, a criação já faz um 'unlink' para limpar.
@@ -281,9 +289,7 @@ bool FIVR_PipeWrapper::IsValid() const
 #if PLATFORM_WINDOWS
     return PipeHandle != INVALID_HANDLE_VALUE && bIsCreatedAndConnected;
 #elif PLATFORM_LINUX || PLATFORM_MAC
-    // No FIFO (Linux/Mac), precisamos que o FIFO tenha sido criado (bIsCreatedAndConnected)
-    // E que a operação de 'open()' para escrita tenha sido bem-sucedida (FileDescriptor != -1)
-    return bIsCreatedAndConnected && FileDescriptor != -1;
+    return FileDescriptor != -1 && bIsCreatedAndConnected; // <--- ALTERAÇÃO: Checar estritamente por -1
 #else // Outras plataformas
     return false;
 #endif

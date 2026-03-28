@@ -16,7 +16,6 @@
 #include "IVRFramePool.h" // Adicionar este include!
 // [MANUAL_REF_POINT] FVideoEncoderWorker agora é de IVROpenCVBridge
 #include "FVideoEncoderWorker.h"
-
 #include "IVRVideoEncoder.generated.h"
 
 // Definição do LogCategory para esta classe
@@ -37,7 +36,6 @@ public:
 
     // Sobrescreve o BeginDestroy para garantir limpeza de recursos quando o UObject é destruído
     virtual void BeginDestroy() override;
-
     // Caminho completo para o executável do FFmpeg
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Encoder Settings")
     FString FFmpegExecutablePath; // Agora gerado automaticamente, mas pode ser sobrescrito pelo BP
@@ -59,7 +57,6 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Encoder")
     bool LaunchEncoder(const FString& LiveOutputFilePath);
-
     /**
      * @brief Encerra o codificador e limpa todos os recursos (pipes, processo FFmpeg, threads).
      */
@@ -79,7 +76,6 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Encoder")
     bool FinishEncoding();
-
     /**
      * @brief Concatena uma lista de arquivos de vídeo em um único arquivo mestre usando FFmpeg.
      * @param InTakePaths Array de caminhos completos para os takes individuais.
@@ -98,7 +94,6 @@ protected:
     // Instância da fábrica de comandos FFmpeg, agora gerenciada por esta classe.
     UPROPERTY()
     UIVRECFactory* EncoderCommandFactory;
-
     // Handle do processo principal do FFmpeg para a gravação ao vivo
     FProcHandle FFmpegProcHandle;
     FFMpegLogReader* FFmpegStdoutLogReader; // Leitor de log do FFmpeg stdout
@@ -112,7 +107,6 @@ protected:
     
     // Nome único do pipe de vídeo para esta sessão
     FString VideoPipeBaseName; // Nome base para o pipe
-
     // Fila thread-safe para frames de vídeo (Mpsc: Multiple Producer, Single Consumer)
     TQueue<FIVR_VideoFrame, EQueueMode::Mpsc> FrameQueue;
     
@@ -134,7 +128,6 @@ protected:
     // Largura e altura reais dos frames a serem processados
     int32 ActualProcessingWidth;
     int32 ActualProcessingHeight;
-
     UPROPERTY() // Adicionar para garantir que o FramePool não seja coletado pelo GC
     UIVRFramePool* FramePool; // Referência ao pool de frames
 

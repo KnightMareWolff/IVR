@@ -25,6 +25,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingStarted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingPaused);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingResumed);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingStopped);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnIVRRecordingStartFailed); // <--- NOVA LINHA: Delegate para falha ao iniciar gravação
+
 
 // Delegate para notificar que um frame em tempo real (agora com features) está pronto para coleta
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRealTimeFrameReady, const FIVR_JustRTFrame&, FrameOutput);
@@ -57,7 +59,6 @@ public:
     // Settings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Video")
     FIVR_VideoSettings VideoSettings;
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Takes")
     float TakeDuration = 5.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IVR|Takes")
@@ -97,12 +98,13 @@ public:
     FOnIVRRecordingStarted OnRecordingStarted;
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingPaused OnRecordingPaused;
-
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingResumed OnRecordingResumed;
-
     UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
     FOnIVRRecordingStopped OnRecordingStopped;
+    UPROPERTY(BlueprintAssignable, Category = "IVR|Recording Events")
+    FOnIVRRecordingStartFailed OnRecordingStartFailed; // <--- NOVA LINHA: Delegate para falha ao iniciar gravação
+
     // Delegate para notificar que um frame em tempo real está pronto para coleta
     UPROPERTY(BlueprintAssignable, Category = "IVR|JustRTCapture Events")
     FOnRealTimeFrameReady OnRealTimeFrameReady;
@@ -117,7 +119,6 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "IVR|Video")
     void RefreshFrameSourceAndApplySettings();
-
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -164,7 +165,6 @@ private:
      *         Esta é uma função auxiliar interna que pode ser chamada por BeginPlay ou RefreshFrameSourceAndApplySettings.
      */
     void Internal_InitializeFrameSource();
-
     /**
      * @brief Processa a FIVR_JustRTFrame em uma thread de segundo plano para extrair features e deprojetá-las para 3D.
      * O resultado é adicionado de volta à FIVR_JustRTFrame antes de ser transmitido via delegate.
