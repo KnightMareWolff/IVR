@@ -27,31 +27,36 @@ UIVRRecordingSession::UIVRRecordingSession()
     , FramePool(nullptr) // Inicializa o FramePool
 {
 }
-UIVRRecordingSession::~UIVRRecordingSession()
+UIVRRecordingSession::~UIVRRecordingSession() // LINHA 37
 {
-    // <--- ALTERAÇÃO: Garante que a gravação seja interrompida e os recursos liberados.
-    // Isso é uma rede de segurança para casos em que StopRecording() explícito pode ter sido perdido ou interrompido.
-    if (bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized()))
-    {
-        UE_LOG(LogIVRRecSession, Warning, TEXT("~UIVRRecordingSession: Forcibly stopping recording during destruction. SessionID: %s"), *SessionID);
-        StopRecording(); 
-    }
-    
-    // <--- ALTERAÇÃO: Explicitamente juntar a thread de gravação aqui se ela ainda estiver ativa.
-    // Isso é crucial para prevenir crashes se a thread ainda estiver rodando quando o UObject é destruído.
+    // <--- ALTERAÇÃO CRÍTICA: Remover a chamada a StopRecording() aqui.
+    // A responsabilidade de parar a sessão é do UIVRRecordingManager,
+    // que já chama StopRecording() explicitamente quando um take termina ou o componente é desligado.
+    // Chamar StopRecording() novamente aqui leva a um double-cleanup do VideoEncoder.
+    // O destrutor deve apenas garantir a limpeza de *seus próprios* recursos não-UPROPERTY,
+    // como RecordingThread e HasNewFrameEvent, e não gerenciar o ciclo de vida de objetos aninhados (VideoEncoder)
+    // que já foram gerenciados pelo fluxo principal.
+
+    // Garante que o RecordingThread pare e seja deletado, se ainda estiver ativo.
     if (RecordingThread)
     {
-        UE_LOG(LogIVRRecSession, Warning, TEXT("~UIVRRecordingSession: Waiting for RecordingThread to complete during destruction. SessionID: %s"), *SessionID);
+        UE_LOG(LogIVRRecSession, Warning, TEXT("~UIVRRecordingSession: Forçando parada do RecordingThread durante destruição. SessionID: %s"), *SessionID);
+        bStopThread.AtomicSet(true);
+        if (HasNewFrameEvent) HasNewFrameEvent->Trigger(); // Acorda o thread para que ele possa processar bStopThread.
         RecordingThread->WaitForCompletion();
         delete RecordingThread;
         RecordingThread = nullptr;
     }
-
+    
+    // Libera o evento de sincronização de volta para o pool.
     if (HasNewFrameEvent)
     {
         FGenericPlatformProcess::ReturnSynchEventToPool(HasNewFrameEvent);
         HasNewFrameEvent = nullptr;
     }
+    // O VideoEncoder (UPROPERTY()) será coletado pelo GC.
+    // FramePool (UPROPERTY()) também será coletado pelo GC.
+    // Eles não devem ser gerenciados aqui no destrutor.
 }
 void UIVRRecordingSession::Initialize(const FIVR_VideoSettings& InVideoSettings, const FString& InFFmpegExecutablePath, int32 InActualFrameWidth, int32 InActualFrameHeight, UIVRFramePool* InFramePool)
 {
@@ -133,16 +138,20 @@ bool UIVRRecordingSession::StartRecording()
     UE_LOG(LogIVRRecSession, Log, TEXT("FFmpeg recording session started for take: %s"), *CurrentTakeFilePath);
     return true; 
 }
-void UIVRRecordingSession::StopRecording()
+void UIVRRecordingSession::StopRecording() // LINHA 165 (aproximada)
 {
     // Validação robusta para evitar warnings falsos ou tentar parar algo que já está parado.
-    bool bNeedsStopping = bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr && VideoEncoder->IsInitialized());
+    // A condição `RecordingThread != nullptr` já é suficiente para saber se a thread está ativa.
+    // `VideoEncoder != nullptr` é uma boa checagem se o encoder existe.
+    bool bNeedsStopping = bIsRecording || bIsPaused || RecordingThread != nullptr || (VideoEncoder != nullptr); // Simplificado
     if (!bNeedsStopping)
     {
-        UE_LOG(LogIVRRecSession, Warning, TEXT("Attempted to stop recording, but session is not active or already stopped. No actions taken."));
+        // Se a sessão já foi marcada como parada, seus threads e encoders já foram tratados.
+        // Apenas logar um aviso se chamarmos StopRecording em algo já parado.
+        UE_LOG(LogIVRRecSession, Warning, TEXT("Attempted to stop recording (SessionID: %s), but session is not active or already stopped. No actions taken."), *SessionID);
         return;
     }
-    UE_LOG(LogIVRRecSession, Log, TEXT("Stopping IVR Recording Session for take..."));
+    UE_LOG(LogIVRRecSession, Log, TEXT("Stopping IVR Recording Session for take (SessionID: %s)..."), *SessionID);
 
     bIsRecording.AtomicSet(false);
     bIsPaused.AtomicSet(false);
@@ -152,16 +161,16 @@ void UIVRRecordingSession::StopRecording()
         HasNewFrameEvent->Trigger();
     }
 
-    // <--- ALTERAÇÃO: 1. Sinaliza ao VideoEncoder que não haverá mais frames e ESPERA que ele termine de escrever.
+    // 1. Sinaliza ao VideoEncoder para finalizar a codificação e fechar o pipe de entrada, se ele estiver inicializado.
+    // Esta parte é crucial, pois sinaliza EOF para o FFmpeg.
     if (VideoEncoder && VideoEncoder->IsInitialized())
     {
-        // Esta é uma chamada bloqueante CRÍTICA na game thread para garantir que todos os frames sejam escritos
-        // e o pipe seja fechado para o FFmpeg.
         UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Calling VideoEncoder->FinishEncoding() and waiting."), *SessionID);
-        VideoEncoder->FinishEncoding(); // Esta função já aguarda a FrameQueue esvaziar e o pipe fechar.
+        VideoEncoder->FinishEncoding(); 
     }
+    // <--- LINHA PROTECTED FFmpegProcHandle.IsValid() REMOVIDA AQUI, POIS NÃO É MAIS NECESSÁRIA.
 
-    // <--- ALTERAÇÃO: 2. Espera o thread de gravação local terminar (já sinalizado com bStopThread = true)
+    // 2. Espera o thread de gravação local (que enfileira frames) ser concluído.
     if (RecordingThread)
     {
         UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Waiting for RecordingThread to complete."), *SessionID);
@@ -171,14 +180,16 @@ void UIVRRecordingSession::StopRecording()
         UE_LOG(LogIVRRecSession, Log, TEXT("Recording thread stopped for SessionID %s."), *SessionID);
     }
 
-    // <--- ALTERAÇÃO: 3. Agora, desliga o processo principal do FFmpeg e libera todos os recursos.
-    // Esta chamada é crucial para garantir que o processo FFmpeg seja fechado e o handle do pipe liberado corretamente.
-    if (VideoEncoder && VideoEncoder->IsInitialized())
+    // 3. Executa um desligamento final dos recursos do VideoEncoder, incluindo o processo FFmpeg.
+    // VideoEncoder->ShutdownEncoder() é projetado para ser idempotente e gerencia seu próprio estado interno.
+    // É seguro chamá-lo se VideoEncoder existe, independentemente de seu estado 'initialized' aqui,
+    // pois ele verificará se o processo FFmpeg ainda está em execução e o limpará.
+    if (VideoEncoder) 
     {
-        UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Calling VideoEncoder->ShutdownEncoder()."), *SessionID);
-        VideoEncoder->ShutdownEncoder(); // Isso internamente aguarda o processo FFmpeg.
+        UE_LOG(LogIVRRecSession, Log, TEXT("StopRecording for SessionID %s: Calling VideoEncoder->ShutdownEncoder() for final cleanup."), *SessionID);
+        VideoEncoder->ShutdownEncoder(); 
     }
-
+    
     // Calcula a duração final da gravação
     RecordingDuration = (FDateTime::Now() - StartTime).GetTotalSeconds();
     UE_LOG(LogIVRRecSession, Log, TEXT("Take recording stopped. Final duration: %.2f seconds. File intended for: %s"), RecordingDuration, *CurrentTakeFilePath);
@@ -365,7 +376,7 @@ uint32 UIVRRecordingSession::Run()
     {
         VideoProducerQCounter--;
         if (VideoEncoder)
-        {
+            {
             VideoEncoder->EncodeFrame(VideoFrame);
             VideoConsumerQCounter++;
         }
